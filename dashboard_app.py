@@ -108,6 +108,19 @@ else:
 
     uploaded_file = st.sidebar.file_uploader("📂 Importar Planilha de Vendas (Excel)", type=["xlsx", "xls"])
 
+    # --- ASSINATURA DO CRIADOR ---
+    st.sidebar.markdown("---")
+st.sidebar.markdown(
+    """
+    <div style="text-align: center; color: #888; font-size: 0.75rem;">
+        <b>Vision Sale v1.0</b><br>
+        Automatizado por: <b>Marciel Oliveira</b><br>
+        <i>Transformando dados em clareza.</i>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
+
 # --- MOTORES DE LIMPEZA E TRADUÇÃO ---
     def clean_numeric(val):
         if pd.isna(val) or str(val).strip() in ['#VALOR!', '-', '']: return 0.0
