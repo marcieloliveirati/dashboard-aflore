@@ -4,6 +4,7 @@ import numpy as np
 import plotly.express as px
 from datetime import datetime, timedelta, date
 import os
+import streamlit.components.v1 as components
 
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Aflore - Dashboard", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
@@ -20,17 +21,12 @@ if not st.session_state.logado:
         </style>
     """, unsafe_allow_html=True)
     
-    # Empurra a tela inteira um pouco para baixo para ficar bem no meio do monitor
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     
-    # Truque das Colunas: Uma coluna grande vazia na esquerda, a do meio para o login, e uma grande na direita
     _, col_login, _ = st.columns([1, 1.2, 1])
     
     with col_login:
-        # Envelopando os inputs em um Form: Isso cria a função "Apertar Enter para enviar"
         with st.form("form_login", clear_on_submit=False):
-            
-            # Centraliza a imagem da Aflore dentro do box de login
             col_img1, col_img2, col_img3 = st.columns([1, 1.5, 1])
             with col_img2:
                 if os.path.exists("logo_aflore.png"):
@@ -45,11 +41,9 @@ if not st.session_state.logado:
             usuario = st.text_input("👤 Usuário")
             senha = st.text_input("🔑 Senha", type="password")
             
-            # Botão de Entrar (Agora ele obedece ao Enter porque está dentro do st.form)
             submit = st.form_submit_button("Entrar", use_container_width=True)
             
             if submit:
-                # Dicionário de Acessos Provisório
                 usuarios_permitidos = {
                     "diretoria": "aflore2026",
                     "admin": "123789123@@"
@@ -57,18 +51,16 @@ if not st.session_state.logado:
                 
                 if usuario in usuarios_permitidos and usuarios_permitidos[usuario] == senha:
                     st.session_state.logado = True
-                    st.rerun() # Libera o acesso
+                    st.rerun()
                 else:
                     st.error("❌ Usuário ou senha incorretos.")
 
-# A Sala de Comando (O Dashboard) - Só roda se o login for True
+# A Sala de Comando (O Dashboard)
 else:
-    # --- ESTILOS DO DASHBOARD ---
+    # --- ESTILOS DO DASHBOARD (Compatível com Tema Claro/Escuro e Impressão PDF) ---
     st.markdown("""
         <style>
-            .main { background-color: #0f1116; color: #ffffff; }
-            .stMetric { background-color: #1b1e26; padding: 15px; border-radius: 10px; border-left: 5px solid #00d48a; }
-            div[data-testid="stSidebarUserContent"] { background-color: #11141c; }
+            .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; border-left: 5px solid #00d48a; }
             .stHeading h1 { color: #00d48a; font-family: 'Helvetica Neue', sans-serif; font-weight: 700; }
             .stHeading h2 { color: #00b4d8; }
             .stHeading h3 { color: #f72585; }
@@ -76,18 +68,35 @@ else:
             
             [data-testid="stFileUploader"] label { display: flex; justify-content: center; }
             [data-testid="stFileUploader"] section { align-items: center !important; text-align: center; }
-            
             [data-testid="stSidebarUserContent"] h3 { text-align: center; }
             [data-testid="stRadio"] > label { display: flex; justify-content: center; }
             [data-testid="stRadio"] div[role="radiogroup"] { width: fit-content; margin: 0 auto; }
+
+            /* --- MÁGICA DO PDF / IMPRESSÃO --- */
+            @media print {
+                section[data-testid="stSidebar"] { display: none !important; }
+                header[data-testid="stHeader"] { display: none !important; }
+                .btn-imprimir { display: none !important; }
+                .main { background-color: white !important; }
+                .block-container { padding-top: 0rem !important; }
+            }
         </style>
     """, unsafe_allow_html=True)
 
-    col_titulo, col_sair = st.columns([8, 1])
+    # --- CABEÇALHO COM BOTÕES DE PDF E SAIR ---
+    col_titulo, col_imprimir, col_sair = st.columns([7, 2, 1])
+    
     with col_titulo:
         st.title("📊 Vision Sale - Inteligência de Vendas")
         st.subheader("Painel Analítico de Desempenho de Lojas")
+        
+    with col_imprimir:
+        st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+        if st.button("🖨️ Gerar PDF Executivo", use_container_width=True):
+            components.html("<script>window.parent.print();</script>", height=0, width=0)
+            
     with col_sair:
+        st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
         if st.button("🚪 Sair", use_container_width=True):
             st.session_state.logado = False
             st.rerun()
@@ -108,19 +117,14 @@ else:
 
     uploaded_file = st.sidebar.file_uploader("📂 Importar Planilha de Vendas (Excel)", type=["xlsx", "xls"])
 
-# --- MOTORES DE LIMPEZA E TRADUÇÃO ---
+    # --- MOTORES DE LIMPEZA E TRADUÇÃO ---
     def clean_numeric(val):
         if pd.isna(val) or str(val).strip() in ['#VALOR!', '-', '']: return 0.0
         if isinstance(val, (int, float)): return float(val)
-        
         val_str = str(val).replace('R$', '').strip()
-        
-        # Se a pessoa digitou com ponto (32.75) e não tem vírgula, o Python entende nativamente
         if '.' in val_str and ',' not in val_str:
             try: return float(val_str)
             except: pass
-            
-        # Se está no padrão correto brasileiro (3.200,50 ou 32,75)
         try: return float(val_str.replace('.', '').replace(',', '.'))
         except: return 0.0
 
@@ -147,7 +151,6 @@ else:
     if uploaded_file is not None:
         try:
             df_raw = pd.read_excel(uploaded_file, header=None)
-            metas_lojas = {'Loja 01': 1830000, 'Loja 02': 610000, 'Loja 03': 220000, 'Loja 04': 305100, 'Loja 05': 10000}
             
             idx_cabecalho = -1
             for i in range(5):
@@ -160,8 +163,25 @@ else:
                 headers = [str(val).strip().upper() for val in df_raw.iloc[idx_cabecalho].values]
                 vl_indices = [i for i, h in enumerate(headers) if 'V.L' in h]
                 nomes_lojas = ['Loja 01', 'Loja 02', 'Loja 03', 'Loja 04', 'Loja 05']
-                all_data = []
                 
+                # CAPTURA DINÂMICA DE METAS DA PLANILHA
+                metas_dinamicas = {}
+                for num_loja, col_vl in enumerate(vl_indices):
+                    if num_loja >= len(nomes_lojas): break
+                    nome_loja = nomes_lojas[num_loja]
+                    col_data = col_vl - 1
+                    
+                    meta_vl, meta_cli = 0.0, 0.0
+                    if col_data >= 0:
+                        for _, r in df_raw.iterrows():
+                            if str(r[col_data]).strip().upper() == 'META':
+                                meta_vl = clean_numeric(r[col_vl])
+                                meta_cli = clean_numeric(r[col_vl + 3])
+                                break
+                    meta_tmv = meta_vl / meta_cli if meta_cli > 0 else 0.0
+                    metas_dinamicas[nome_loja] = {'vl': meta_vl, 'cli': meta_cli, 'tmv': meta_tmv}
+                
+                all_data = []
                 for idx, row in df_raw.iterrows():
                     if idx <= idx_cabecalho: continue 
                     
@@ -192,7 +212,9 @@ else:
                                     'Ticket_Medio': tmv,
                                     'PA': pa, 
                                     'Clientes': int(clientes),
-                                    'Meta_Total_Loja': metas_lojas.get(nome_loja, 0)
+                                    'Meta_Faturamento': metas_dinamicas[nome_loja]['vl'],
+                                    'Meta_Clientes': metas_dinamicas[nome_loja]['cli'],
+                                    'Meta_TMV': metas_dinamicas[nome_loja]['tmv']
                                 })
                         except Exception: pass
                 
@@ -256,46 +278,97 @@ else:
             ticket_medio_geral = total_faturamento / total_clientes if total_clientes > 0 else 0
             pa_medio = df_filtrado['PA'].mean()
 
+            # --- LÓGICA DE METAS PROPORCIONAIS ---
             dias_no_filtro = df_filtrado['Data_Real'].nunique()
             dias_totais_planilha = df['Data_Real'].nunique()
             fator_meta = dias_no_filtro / dias_totais_planilha if dias_totais_planilha > 0 else 1
 
-            meta_global_loja = df_filtrado.drop_duplicates(subset=['Loja'])['Meta_Total_Loja'].sum() if loja_selecionada == 'Todas as Lojas' else df_filtrado['Meta_Total_Loja'].iloc[0]
-            meta_proporcional = meta_global_loja * fator_meta
-            
-            percentual_meta = (total_faturamento / meta_proporcional) * 100 if meta_proporcional > 0 else 0
+            if loja_selecionada == 'Todas as Lojas':
+                df_unicas = df_filtrado.drop_duplicates(subset=['Loja'])
+                meta_global_fat = df_unicas['Meta_Faturamento'].sum()
+                meta_global_cli = df_unicas['Meta_Clientes'].sum()
+                meta_global_tmv = meta_global_fat / meta_global_cli if meta_global_cli > 0 else 0
+            else:
+                meta_global_fat = df_filtrado['Meta_Faturamento'].iloc[0]
+                meta_global_cli = df_filtrado['Meta_Clientes'].iloc[0]
+                meta_global_tmv = df_filtrado['Meta_TMV'].iloc[0]
 
-            kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
-            with kpi1: st.metric("💰 Faturamento Total", f"R$ {total_faturamento:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-            with kpi2: st.metric("🎯 Atingimento de Meta", f"{percentual_meta:.1f}%")
-            with kpi3: st.metric("👥 Total Atendimentos", f"{total_clientes:,}".replace(',', '.'))
-            with kpi4: st.metric("🎟️ Ticket Médio Geral", f"R$ {ticket_medio_geral:.2f}".replace('.', ','))
-            with kpi5: st.metric("📦 Peças por Atend. (P.A)", f"{pa_medio:.1f}")
+            meta_prop_fat = meta_global_fat * fator_meta
+            meta_prop_cli = meta_global_cli * fator_meta
+            meta_prop_tmv = meta_global_tmv
+
+            perc_fat = (total_faturamento / meta_prop_fat) * 100 if meta_prop_fat > 0 else 0
+            perc_cli = (total_clientes / meta_prop_cli) * 100 if meta_prop_cli > 0 else 0
+            perc_tmv = (ticket_medio_geral / meta_prop_tmv) * 100 if meta_prop_tmv > 0 else 0
+
+            # --- FORMATAÇÃO DOS VALORES PARA AS METAS ---
+            str_meta_fat = f"R$ {meta_prop_fat:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            str_meta_cli = f"{int(meta_prop_cli):,}".replace(',', '.')
+            str_meta_tmv = f"R$ {meta_prop_tmv:,.2f}".replace('.', ',')
+
+            # --- CARDS VISUAIS DE PREVISTO X REALIZADO ---
+            st.markdown("### 🎯 Acompanhamento de Metas")
+            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+            
+            with kpi1: 
+                st.metric("💰 Faturamento", f"R$ {total_faturamento:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'), f"{perc_fat:.1f}% da Meta")
+                st.markdown(f"<div style='font-size: 1rem; font-weight: 700; color: #f77f00; margin-top: -15px; margin-bottom: 10px;'>🎯 Previsto: {str_meta_fat}</div>", unsafe_allow_html=True)
+                st.progress(min(perc_fat / 100, 1.0))
+                
+            with kpi2: 
+                st.metric("👥 Clientes", f"{int(total_clientes):,}".replace(',', '.'), f"{perc_cli:.1f}% da Meta")
+                st.markdown(f"<div style='font-size: 1rem; font-weight: 700; color: #f77f00; margin-top: -15px; margin-bottom: 10px;'>🎯 Previsto: {str_meta_cli}</div>", unsafe_allow_html=True)
+                st.progress(min(perc_cli / 100, 1.0))
+                
+            with kpi3: 
+                st.metric("🎟️ Ticket Médio", f"R$ {ticket_medio_geral:,.2f}".replace('.', ','), f"{perc_tmv:.1f}% da Meta")
+                st.markdown(f"<div style='font-size: 1rem; font-weight: 700; color: #f77f00; margin-top: -15px; margin-bottom: 10px;'>🎯 Previsto: {str_meta_tmv}</div>", unsafe_allow_html=True)
+                st.progress(min(perc_tmv / 100, 1.0))
+                
+            with kpi4: 
+                st.metric("📦 Peças por Atend. (P.A)", f"{pa_medio:.1f}")
+                st.markdown("<div style='font-size: 1rem; font-weight: 600; color: #888888; margin-top: -15px; margin-bottom: 10px;'>Média do período</div>", unsafe_allow_html=True)
 
             st.markdown("---")
 
             col_esq, col_dir = st.columns(2)
             with col_esq:
-                st.subheader("📈 Tendência Diária de Faturamento")
+                st.subheader("📈 Tendência Diária x Meta")
                 df_diario = df_filtrado.groupby('Data_String')['Venda_Liquida'].sum().reset_index()
-                fig_linha = px.line(df_diario, x='Data_String', y='Venda_Liquida', labels={'Venda_Liquida': 'Faturamento (R$)', 'Data_String': 'Dia'}, template='plotly_dark', markers=True)
-                fig_linha.update_traces(line_color='#00b4d8', line_width=3)
-                st.plotly_chart(fig_linha, use_container_width=True)
+                
+                fig_linha = px.line(df_diario, x='Data_String', y='Venda_Liquida', labels={'Venda_Liquida': 'Faturamento (R$)', 'Data_String': 'Dia'}, markers=True)
+                fig_linha.update_traces(line_color='#00b4d8', line_width=3, name='Realizado', showlegend=True)
+                
+                meta_diaria = meta_global_fat / dias_totais_planilha if dias_totais_planilha > 0 else 0
+                fig_linha.add_hline(y=meta_diaria, line_dash="dash", line_color="#f72585", annotation_text="Meta Diária", annotation_position="top right", annotation_font_color="#f72585")
+                fig_linha.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                
+                st.plotly_chart(fig_linha, use_container_width=True, theme="streamlit")
 
             with col_dir:
-                st.subheader("🏪 Faturamento por Unidade / Loja")
-                df_loja_sum = df_filtrado.groupby('Loja')['Venda_Liquida'].sum().reset_index().sort_values(by='Venda_Liquida', ascending=False)
-                fig_barra = px.bar(df_loja_sum, x='Loja', y='Venda_Liquida', labels={'Venda_Liquida': 'Faturamento (R$)'}, template='plotly_dark', color='Venda_Liquida', color_continuous_scale='Viridis')
-                st.plotly_chart(fig_barra, use_container_width=True)
+                st.subheader("🏪 Previsto x Realizado por Unidade")
+                
+                df_loja_sum = df_filtrado.groupby('Loja').agg({'Venda_Liquida': 'sum', 'Meta_Faturamento': 'first'}).reset_index()
+                df_loja_sum['Meta_Proporcional'] = df_loja_sum['Meta_Faturamento'] * fator_meta
+                
+                df_barras = df_loja_sum.melt(id_vars='Loja', value_vars=['Venda_Liquida', 'Meta_Proporcional'], var_name='Tipo', value_name='Valor')
+                df_barras['Tipo'] = df_barras['Tipo'].map({'Venda_Liquida': 'Realizado', 'Meta_Proporcional': 'Previsto'})
+                
+                fig_barra = px.bar(df_barras, x='Loja', y='Valor', color='Tipo', barmode='group', 
+                                   color_discrete_map={'Realizado': '#00b4d8', 'Previsto': '#a8a8a8'},
+                                   labels={'Valor': 'Faturamento (R$)', 'Tipo': 'Métrica'})
+                
+                fig_barra.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                st.plotly_chart(fig_barra, use_container_width=True, theme="streamlit")
 
             st.markdown("---")
             col_infra1, col_infra2 = st.columns(2)
             with col_infra1:
                 st.subheader("🛒 Eficiência: Ticket Médio vs P.A")
                 df_eficiencia = df_filtrado.groupby('Loja').agg({'Ticket_Medio': 'mean', 'PA': 'mean'}).reset_index()
-                fig_scatter = px.scatter(df_eficiencia, x='Ticket_Medio', y='PA', text='Loja', size='Ticket_Medio', color='Loja', template='plotly_dark')
+                fig_scatter = px.scatter(df_eficiencia, x='Ticket_Medio', y='PA', text='Loja', size='Ticket_Medio', color='Loja')
                 fig_scatter.update_traces(textposition='top center')
-                st.plotly_chart(fig_scatter, use_container_width=True)
+                st.plotly_chart(fig_scatter, use_container_width=True, theme="streamlit")
 
             with col_infra2:
                 st.subheader("📋 Tabela de Dados Consolidados")
@@ -309,12 +382,12 @@ else:
                 Faça o upload da planilha Excel no menu lateral esquerdo para visualizar os gráficos.</p>
             </div>
         """, unsafe_allow_html=True)
-        # Certifique-se de que o st.sidebar não tem espaços extras no início da linha
+        
     st.sidebar.markdown("---")
     st.sidebar.markdown(
         """
         <div style="text-align: center; color: #888; font-size: 0.75rem;">
-            <b>Vision Sale v1.0</b><br>
+            <b>Vision Sale v1.1 2026/06/22</b><br>
             Automatizado por: <b>Marciel Oliveira</b><br>
             <i>Transformando dados em clareza.</i>
         </div>
