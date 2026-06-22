@@ -5,6 +5,7 @@ import plotly.express as px
 from datetime import datetime, timedelta, date
 import os
 import streamlit.components.v1 as components
+import time
 
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Aflore - Dashboard", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
@@ -57,7 +58,7 @@ if not st.session_state.logado:
 
 # A Sala de Comando (O Dashboard)
 else:
-    # --- ESTILOS DO DASHBOARD (Compatível com Tema Claro/Escuro e Impressão PDF) ---
+# --- ESTILOS DO DASHBOARD (Otimizado para PDF) ---
     st.markdown("""
         <style>
             .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; border-left: 5px solid #00d48a; }
@@ -72,13 +73,33 @@ else:
             [data-testid="stRadio"] > label { display: flex; justify-content: center; }
             [data-testid="stRadio"] div[role="radiogroup"] { width: fit-content; margin: 0 auto; }
 
-            /* --- MÁGICA DO PDF / IMPRESSÃO --- */
+            /* --- OTIMIZAÇÃO DE NÚMEROS GRANDES (EVITAR O '...') --- */
+            div[data-testid="stMetricValue"] > div {
+                font-size: 1.5rem !important; /* Diminui a fonte principal na tela */
+                white-space: nowrap !important; /* Força o número a ficar na mesma linha */
+            }
+
+/* --- MÁGICA DO PDF / IMPRESSÃO --- */
             @media print {
+                /* Força a tela a ficar 100% nítida, tirando o overlay de carregamento */
+                .stApp, div[data-testid="stAppViewContainer"], .main { 
+                    opacity: 1 !important; 
+                    filter: none !important; 
+                }
+                
                 section[data-testid="stSidebar"] { display: none !important; }
                 header[data-testid="stHeader"] { display: none !important; }
                 .btn-imprimir { display: none !important; }
                 .main { background-color: white !important; }
                 .block-container { padding-top: 0rem !important; }
+                
+                div[data-testid="stMetricValue"] > div {
+                    font-size: 1.2rem !important; 
+                }
+                .stMetric { padding: 10px !important; margin-bottom: 10px !important; }
+                div[data-testid="stMarkdownContainer"] p {
+                    font-size: 0.9rem !important; 
+                }
             }
         </style>
     """, unsafe_allow_html=True)
@@ -93,8 +114,13 @@ else:
     with col_imprimir:
         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
         if st.button("🖨️ Gerar PDF Executivo", use_container_width=True):
-            components.html("<script>window.parent.print();</script>", height=0, width=0)
-            
+            # O setTimeout aguarda 1 segundo (1000ms) para abrir a impressão.
+            # Isso dá tempo suficiente para o "esbranquiçado" do Streamlit sumir da tela.
+            components.html(
+                f"<script>setTimeout(function() {{ window.parent.print(); }}, 1000);</script><span style='display:none'>{time.time()}</span>", 
+                height=0, 
+                width=0
+            )           
     with col_sair:
         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
         if st.button("🚪 Sair", use_container_width=True):
@@ -387,7 +413,7 @@ else:
     st.sidebar.markdown(
         """
         <div style="text-align: center; color: #888; font-size: 0.75rem;">
-            <b>Vision Sale v1.1 2026/06/22</b><br>
+            <b>Vision Sale v1.3</b><br>
             Automatizado por: <b>Marciel Oliveira</b><br>
             <i>Transformando dados em clareza.</i>
         </div>
