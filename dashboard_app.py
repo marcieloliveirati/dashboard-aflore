@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, date
 import os
 import streamlit.components.v1 as components
 import time
+import calendar 
 
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Aflore - Dashboard", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
@@ -47,7 +48,7 @@ if not st.session_state.logado:
             if submit:
                 usuarios_permitidos = {
                     "diretoria": "aflore2026",
-                    "admin": "123789123@@"
+                    "admin": "123"
                 }
                 
                 if usuario in usuarios_permitidos and usuarios_permitidos[usuario] == senha:
@@ -56,11 +57,21 @@ if not st.session_state.logado:
                 else:
                     st.error("❌ Usuário ou senha incorretos.")
 
+        # --- ASSINATURA NA TELA DE LOGIN ---
+        st.markdown("""
+            <div style="text-align: center; color: #888; font-size: 0.75rem; margin-top: 15px;">
+                <b>Vision Sale v1.8</b><br>
+                Automatizado por: <b>Marciel Oliveira</b><br>
+                <i>Transformando dados em clareza.</i>
+            </div>
+        """, unsafe_allow_html=True)
+
 # A Sala de Comando (O Dashboard)
 else:
-# --- ESTILOS DO DASHBOARD (Otimizado para PDF) ---
+    # --- ESTILOS DO DASHBOARD (TELA LIVRE / PDF SEMPRE LIGHT MODE) ---
     st.markdown("""
         <style>
+            /* === ESTILOS PARA A TELA === */
             .stMetric { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; border-left: 5px solid #00d48a; }
             .stHeading h1 { color: #00d48a; font-family: 'Helvetica Neue', sans-serif; font-weight: 700; }
             .stHeading h2 { color: #00b4d8; }
@@ -73,33 +84,91 @@ else:
             [data-testid="stRadio"] > label { display: flex; justify-content: center; }
             [data-testid="stRadio"] div[role="radiogroup"] { width: fit-content; margin: 0 auto; }
 
-            /* --- OTIMIZAÇÃO DE NÚMEROS GRANDES (EVITAR O '...') --- */
-            div[data-testid="stMetricValue"] > div {
-                font-size: 1.5rem !important; /* Diminui a fonte principal na tela */
-                white-space: nowrap !important; /* Força o número a ficar na mesma linha */
-            }
+            div[data-testid="stMetricValue"] > div { font-size: 1.5rem !important; white-space: nowrap !important; }
 
-/* --- MÁGICA DO PDF / IMPRESSÃO --- */
+            /* --- Oculta as divs exclusivas do PDF e forçadores no modo TELA --- */
+            .print-only { display: none; }
+            .page-break { display: none; }
+
+            /* === MÁGICA DO PDF: FORÇAR LIGHT MODE ABSOLUTO E PAGINAÇÃO === */
             @media print {
-                /* Força a tela a ficar 100% nítida, tirando o overlay de carregamento */
-                .stApp, div[data-testid="stAppViewContainer"], .main { 
-                    opacity: 1 !important; 
-                    filter: none !important; 
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+                html, body, [class*="stApp"], [data-testid="stAppViewContainer"], .main {
+                    background-color: #ffffff !important;
+                    background-image: none !important;
                 }
-                
-                section[data-testid="stSidebar"] { display: none !important; }
-                header[data-testid="stHeader"] { display: none !important; }
-                .btn-imprimir { display: none !important; }
-                .main { background-color: white !important; }
+
+                p, span, div, h1, h2, h3, h4, h5, h6, text, label, li {
+                    color: #000000 !important;
+                }
+
+                [data-baseweb="select"] > div, [data-testid="stSelectbox"] div {
+                    background-color: #ffffff !important;
+                    border-color: #cccccc !important;
+                }
+
+                .stHeading h1 { color: #00d48a !important; }
+                .stHeading h2 { color: #00b4d8 !important; }
+                .stHeading h3 { color: #f72585 !important; }
+                .gps-box h4 { color: #f72585 !important; }
+                [data-testid="stMetricDelta"] *, [data-testid="stMetricDelta"] svg { color: inherit !important; }
+
+                [data-testid="metric-container"], .gps-box {
+                    background-color: #f8f9fa !important;
+                    border-left: 5px solid #00d48a !important;
+                    border-radius: 8px !important;
+                    padding: 10px !important; margin-bottom: 10px !important;
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                }
+                div[data-testid="stMetricValue"] > div { font-size: 1.2rem !important; }
+
+                /* Forçar Transparência e Evitar Corte nos Gráficos */
+                [data-testid="stPlotlyChart"], [data-testid="stPlotlyChart"] > div, 
+                .js-plotly-plot, .js-plotly-plot .main-svg {
+                    background-color: transparent !important;
+                    background: transparent !important;
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                }
+                .js-plotly-plot .plotly .bg { fill: transparent !important; }
+                .js-plotly-plot .plotly text { fill: #000000 !important; }
+                .js-plotly-plot .plotly .gridlayer path { stroke: #e0e0e0 !important; }
+                .js-plotly-plot .plotly .zerolinelayer path { stroke: #cccccc !important; }
+
+                /* QUEBRA DE PÁGINA INTELIGENTE E CAMUFLAGEM DE ELEMENTOS DE TELA */
+                .hide-on-print { display: none !important; }
+
+                .page-break {
+                    display: block !important;
+                    page-break-before: always !important;
+                    break-before: page !important;
+                    height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                }
+
+                /* Esconde Tabelas Streamlit Nativas no PDF e Mostra a Tabela HTML Customizada */
+                [data-testid="stDataFrame"] { display: none !important; } 
+                .print-only { display: block !important; page-break-inside: avoid !important; }
+
+                /* Estilização da Tabela de Impressão */
+                .tabela-pdf { 
+                    width: 100%; border-collapse: collapse; font-family: 'Helvetica Neue', sans-serif; 
+                    font-size: 0.85rem; margin-top: 10px; background-color: #ffffff !important; color: #000000 !important;
+                }
+                .tabela-pdf th, .tabela-pdf td { 
+                    border: 1px solid #e0e0e0 !important; padding: 8px !important; text-align: left !important; 
+                    background-color: #ffffff !important; color: #000000 !important;
+                }
+                .tabela-pdf th { background-color: #f8f9fa !important; color: #00d48a !important; font-weight: bold !important; }
+
+                /* Esconder Menus e Botões Inúteis para o papel */
+                section[data-testid="stSidebar"], header[data-testid="stHeader"], .btn-imprimir, .stButton {
+                    display: none !important;
+                }
                 .block-container { padding-top: 0rem !important; }
-                
-                div[data-testid="stMetricValue"] > div {
-                    font-size: 1.2rem !important; 
-                }
-                .stMetric { padding: 10px !important; margin-bottom: 10px !important; }
-                div[data-testid="stMarkdownContainer"] p {
-                    font-size: 0.9rem !important; 
-                }
             }
         </style>
     """, unsafe_allow_html=True)
@@ -113,14 +182,13 @@ else:
         
     with col_imprimir:
         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-        if st.button("🖨️ Gerar PDF Executivo", use_container_width=True):
-            # O setTimeout aguarda 1 segundo (1000ms) para abrir a impressão.
-            # Isso dá tempo suficiente para o "esbranquiçado" do Streamlit sumir da tela.
+        if st.button("🖨️ Gerar PDF", use_container_width=True):
             components.html(
                 f"<script>setTimeout(function() {{ window.parent.print(); }}, 1000);</script><span style='display:none'>{time.time()}</span>", 
                 height=0, 
                 width=0
-            )           
+            )
+            
     with col_sair:
         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
         if st.button("🚪 Sair", use_container_width=True):
@@ -173,13 +241,19 @@ else:
 
     df = pd.DataFrame()
 
-    # --- MOTOR DE LEITURA DO EXCEL ---
+    # --- MOTOR DE LEITURA INTELIGENTE (MÚLTIPLAS ABAS) ---
     if uploaded_file is not None:
         try:
-            df_raw = pd.read_excel(uploaded_file, header=None)
+            xls_dict = pd.read_excel(uploaded_file, sheet_name=None, header=None)
+            
+            lista_abas = list(xls_dict.keys())
+            st.sidebar.markdown("---")
+            aba_selecionada = st.sidebar.selectbox("📅 Selecione o Mês/Guia:", lista_abas)
+            
+            df_raw = xls_dict[aba_selecionada]
             
             idx_cabecalho = -1
-            for i in range(5):
+            for i in range(min(5, len(df_raw))):
                 valores_linha = [str(val).strip().upper() for val in df_raw.iloc[i].values]
                 if 'V.L' in valores_linha or 'V.L.' in valores_linha:
                     idx_cabecalho = i
@@ -190,7 +264,6 @@ else:
                 vl_indices = [i for i, h in enumerate(headers) if 'V.L' in h]
                 nomes_lojas = ['Loja 01', 'Loja 02', 'Loja 03', 'Loja 04', 'Loja 05']
                 
-                # CAPTURA DINÂMICA DE METAS DA PLANILHA
                 metas_dinamicas = {}
                 for num_loja, col_vl in enumerate(vl_indices):
                     if num_loja >= len(nomes_lojas): break
@@ -252,12 +325,12 @@ else:
                     df['Data_String'] = df['Data_Real'].apply(lambda d: d.strftime("%d/%m"))
                 
             if df.empty:
-                st.sidebar.warning("⚠️ Planilha lida, mas sem dados válidos encontrados.")
+                st.sidebar.warning(f"⚠️ Planilha lida (Aba: {aba_selecionada}), mas sem dados válidos encontrados.")
             else:
-                st.sidebar.success("✅ Planilha processada com sucesso!")
+                st.sidebar.success(f"✅ Aba '{aba_selecionada}' processada com sucesso!")
                 
         except Exception as e:
-            st.sidebar.error("❌ Arquivo inválido ou corrompido.")
+            st.sidebar.error(f"❌ Arquivo inválido ou formato incompatível. Erro Técnico: {str(e)}")
     else:
         st.sidebar.info("💡 Suba a planilha real para processar os números da operação.")
 
@@ -265,6 +338,7 @@ else:
     if not df.empty and 'Loja' in df.columns:
         
         lista_lojas = ['Todas as Lojas'] + list(df['Loja'].unique())
+        st.sidebar.markdown("---")
         loja_selecionada = st.selectbox("🏪 Selecione a Unidade:", lista_lojas)
 
         st.sidebar.markdown("---")
@@ -277,6 +351,36 @@ else:
         hoje = date.today()
         df_filtrado = df.copy()
 
+        # --- MOTOR DE INTELIGÊNCIA: GPS DE VENDAS ---
+        df_contexto = df.copy()
+        if loja_selecionada != 'Todas as Lojas':
+            df_contexto = df_contexto[df_contexto['Loja'] == loja_selecionada]
+
+        meta_mes_total = df_contexto.drop_duplicates(subset=['Loja'])['Meta_Faturamento'].sum()
+        faturado_mes_total = df_contexto['Venda_Liquida'].sum()
+
+        max_data_planilha = df_contexto['Data_Real'].max()
+        nova_meta_diaria, meta_diaria_original, dias_uteis_restantes, dias_uteis_passados = 0, 0, 0, 0
+        
+        if pd.notna(max_data_planilha):
+            ano_ref = max_data_planilha.year
+            mes_ref = max_data_planilha.month
+            _, num_dias = calendar.monthrange(ano_ref, mes_ref)
+
+            dias_uteis_total = sum(1 for d in range(1, num_dias + 1) if date(ano_ref, mes_ref, d).weekday() < 6)
+            dias_uteis_passados = sum(1 for d in range(1, max_data_planilha.day + 1) if date(ano_ref, mes_ref, d).weekday() < 6)
+            dias_uteis_restantes = dias_uteis_total - dias_uteis_passados
+
+            meta_restante = max(0, meta_mes_total - faturado_mes_total)
+            
+            if dias_uteis_restantes > 0:
+                nova_meta_diaria = meta_restante / dias_uteis_restantes
+            else:
+                nova_meta_diaria = 0 if meta_restante <= 0 else meta_restante
+                
+            meta_diaria_original = meta_mes_total / dias_uteis_total if dias_uteis_total > 0 else 0
+
+        # --- APLICAÇÃO DOS FILTROS ---
         if opcao_data == "Hoje":
             df_filtrado = df_filtrado[df_filtrado['Data_Real'] == hoje]
         elif opcao_data == "Ontem":
@@ -327,12 +431,11 @@ else:
             perc_cli = (total_clientes / meta_prop_cli) * 100 if meta_prop_cli > 0 else 0
             perc_tmv = (ticket_medio_geral / meta_prop_tmv) * 100 if meta_prop_tmv > 0 else 0
 
-            # --- FORMATAÇÃO DOS VALORES PARA AS METAS ---
             str_meta_fat = f"R$ {meta_prop_fat:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
             str_meta_cli = f"{int(meta_prop_cli):,}".replace(',', '.')
             str_meta_tmv = f"R$ {meta_prop_tmv:,.2f}".replace('.', ',')
 
-            # --- CARDS VISUAIS DE PREVISTO X REALIZADO ---
+            # --- CARDS VISUAIS ---
             st.markdown("### 🎯 Acompanhamento de Metas")
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
             
@@ -355,50 +458,151 @@ else:
                 st.metric("📦 Peças por Atend. (P.A)", f"{pa_medio:.1f}")
                 st.markdown("<div style='font-size: 1rem; font-weight: 600; color: #888888; margin-top: -15px; margin-bottom: 10px;'>Média do período</div>", unsafe_allow_html=True)
 
-            st.markdown("---")
+            # --- BANNER: GPS DE VENDAS ---
+            str_nova_meta = f"R$ {nova_meta_diaria:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            str_meta_orig = f"R$ {meta_diaria_original:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            
+            cor_alerta = "#00d48a" if nova_meta_diaria <= meta_diaria_original else "#f72585"
+            mensagem_status = "Meta sob controle." if nova_meta_diaria <= meta_diaria_original else "Aceleração necessária."
+            
+            st.markdown(f"""
+            <div class="gps-box" style='background-color: rgba(128,128,128, 0.1); padding: 20px; border-radius: 10px; border-left: 8px solid {cor_alerta}; margin-bottom: 25px; margin-top: 15px;'>
+                <h4 style='margin:0 0 10px 0; color: {cor_alerta};'>🧭 GPS de Vendas: Recálculo de Rota Diário</h4>
+                <div style='display: flex; justify-content: space-between; flex-wrap: wrap;'>
+                    <div style='flex: 1; min-width: 200px;'>
+                        <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Meta Diária Original</p>
+                        <p class="gps-val" style='margin:0; font-size: 1.4rem; font-weight: bold;'>{str_meta_orig}</p>
+                    </div>
+                    <div style='flex: 1; min-width: 200px;'>
+                        <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Meta Diária Exigida (Hoje)</p>
+                        <p style='margin:0; font-size: 1.4rem; font-weight: bold; color: {cor_alerta};'>{str_nova_meta}</p>
+                    </div>
+                    <div style='flex: 1; min-width: 200px;'>
+                        <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Status do Mês</p>
+                        <p class="gps-val" style='margin:0; font-size: 1.1rem;'>Restam <b>{dias_uteis_restantes} dias úteis</b>. {mensagem_status}</p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # --- MOTOR DE CÁLCULO PARA GRÁFICOS DIÁRIOS E ACUMULADOS ---
+            df_diario = df_filtrado.groupby('Data_Real')['Venda_Liquida'].sum().sort_index().reset_index()
+            df_diario['Data_String'] = df_diario['Data_Real'].apply(lambda d: d.strftime("%d/%m"))
+            
+            # Cálculo dos Acumulados (Lógica do CMO)
+            df_diario['Realizado_Acumulado'] = df_diario['Venda_Liquida'].cumsum()
+            
+            if pd.notna(max_data_planilha):
+                def get_working_days_up_to(d):
+                    try: return sum(1 for day in range(1, d.day + 1) if date(d.year, d.month, day).weekday() < 6)
+                    except: return 1
+                df_diario['Dias_Uteis_Ate_Hoje'] = df_diario['Data_Real'].apply(get_working_days_up_to)
+                df_diario['Meta_Acumulada'] = df_diario['Dias_Uteis_Ate_Hoje'] * meta_diaria_original
+            else:
+                df_diario['Meta_Acumulada'] = (np.arange(len(df_diario)) + 1) * meta_diaria_original
 
             col_esq, col_dir = st.columns(2)
             with col_esq:
                 st.subheader("📈 Tendência Diária x Meta")
-                df_diario = df_filtrado.groupby('Data_String')['Venda_Liquida'].sum().reset_index()
-                
                 fig_linha = px.line(df_diario, x='Data_String', y='Venda_Liquida', labels={'Venda_Liquida': 'Faturamento (R$)', 'Data_String': 'Dia'}, markers=True)
                 fig_linha.update_traces(line_color='#00b4d8', line_width=3, name='Realizado', showlegend=True)
-                
-                meta_diaria = meta_global_fat / dias_totais_planilha if dias_totais_planilha > 0 else 0
-                fig_linha.add_hline(y=meta_diaria, line_dash="dash", line_color="#f72585", annotation_text="Meta Diária", annotation_position="top right", annotation_font_color="#f72585")
+                fig_linha.add_hline(y=meta_diaria_original, line_dash="solid", line_color="#00d48a", annotation_text="Meta Original", annotation_position="bottom right")
+                if nova_meta_diaria > 0 and nova_meta_diaria != meta_diaria_original:
+                    fig_linha.add_hline(y=nova_meta_diaria, line_dash="dash", line_color="#f72585", annotation_text="Meta Exigida", annotation_position="top right")
                 fig_linha.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                
                 st.plotly_chart(fig_linha, use_container_width=True, theme="streamlit")
 
             with col_dir:
                 st.subheader("🏪 Previsto x Realizado por Unidade")
-                
                 df_loja_sum = df_filtrado.groupby('Loja').agg({'Venda_Liquida': 'sum', 'Meta_Faturamento': 'first'}).reset_index()
                 df_loja_sum['Meta_Proporcional'] = df_loja_sum['Meta_Faturamento'] * fator_meta
-                
                 df_barras = df_loja_sum.melt(id_vars='Loja', value_vars=['Venda_Liquida', 'Meta_Proporcional'], var_name='Tipo', value_name='Valor')
                 df_barras['Tipo'] = df_barras['Tipo'].map({'Venda_Liquida': 'Realizado', 'Meta_Proporcional': 'Previsto'})
-                
                 fig_barra = px.bar(df_barras, x='Loja', y='Valor', color='Tipo', barmode='group', 
                                    color_discrete_map={'Realizado': '#00b4d8', 'Previsto': '#a8a8a8'},
                                    labels={'Valor': 'Faturamento (R$)', 'Tipo': 'Métrica'})
-                
                 fig_barra.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
                 st.plotly_chart(fig_barra, use_container_width=True, theme="streamlit")
 
-            st.markdown("---")
-            col_infra1, col_infra2 = st.columns(2)
-            with col_infra1:
-                st.subheader("🛒 Eficiência: Ticket Médio vs P.A")
-                df_eficiencia = df_filtrado.groupby('Loja').agg({'Ticket_Medio': 'mean', 'PA': 'mean'}).reset_index()
-                fig_scatter = px.scatter(df_eficiencia, x='Ticket_Medio', y='PA', text='Loja', size='Ticket_Medio', color='Loja')
-                fig_scatter.update_traces(textposition='top center')
-                st.plotly_chart(fig_scatter, use_container_width=True, theme="streamlit")
+            # =========================================================================
+            # --- INJEÇÃO DA QUEBRA DE PÁGINA PARA O RELATÓRIO PDF (FIM DA PÁG 1) ---
+            # =========================================================================
+            st.markdown('<div class="page-break"></div>', unsafe_allow_html=True)
+            st.markdown('<hr class="hide-on-print">', unsafe_allow_html=True)
+            
+            # --- NOVO GRÁFICO DO CMO: LINHA DE FUGA ACUMULADA (PÁGINA 2) ---
+            st.subheader("📈 Faturamento Acumulado vs Meta Projetada")
+            
+            df_plot_acumulado = df_diario.rename(columns={
+                'Realizado_Acumulado': 'Realizado Acumulado',
+                'Meta_Acumulada': 'Meta Projetada Acumulada'
+            })
+            
+            fig_acumulado = px.line(df_plot_acumulado, x='Data_String', y=['Realizado Acumulado', 'Meta Projetada Acumulada'],
+                                    labels={'value': 'Volume Financeiro (R$)', 'Data_String': 'Dia do Mês', 'variable': 'Indicador'},
+                                    markers=True, color_discrete_map={'Realizado Acumulado': '#00b4d8', 'Meta Projetada Acumulada': '#00d48a'})
+            
+            fig_acumulado.update_traces(patch={"line": {"width": 4}}, selector={"name": "Realizado Acumulado"})
+            fig_acumulado.update_traces(patch={"line": {"width": 3, "dash": "dash"}}, selector={"name": "Meta Projetada Acumulada"})
+            fig_acumulado.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            st.plotly_chart(fig_acumulado, use_container_width=True, theme="streamlit")
 
-            with col_infra2:
-                st.subheader("📋 Tabela de Dados Consolidados")
-                st.dataframe(df_filtrado[['Data_String', 'Loja', 'Venda_Liquida', 'Ticket_Medio', 'PA', 'Clientes']].rename(columns={'Data_String': 'Data'}), use_container_width=True, height=300)
+            st.markdown('<hr class="hide-on-print">', unsafe_allow_html=True)
+            
+            # --- GRÁFICO FULL-WIDTH: EFICIÊNCIA ---
+            st.subheader("🛒 Eficiência: Ticket Médio vs P.A")
+            df_eficiencia = df_filtrado.groupby('Loja').agg({'Ticket_Medio': 'mean', 'PA': 'mean'}).reset_index()
+            fig_scatter = px.scatter(df_eficiencia, x='Ticket_Medio', y='PA', text='Loja', size='Ticket_Medio', color='Loja')
+            fig_scatter.update_traces(textposition='top center')
+            st.plotly_chart(fig_scatter, use_container_width=True, theme="streamlit")
+
+            # =========================================================================
+            # --- SEÇÃO DE RANKING (PÁGINA 3 NO PDF) ---
+            # =========================================================================
+            
+            # Preparando os Dados
+            df_base = df_filtrado[['Data_String', 'Loja', 'Venda_Liquida', 'Ticket_Medio', 'PA', 'Clientes']].rename(columns={'Data_String': 'Data'})
+            df_top10 = df_base.nlargest(10, 'Venda_Liquida').copy()
+            df_bottom10 = df_base.nsmallest(10, 'Venda_Liquida').copy()
+
+            for d in [df_top10, df_bottom10]:
+                d['Venda_Liquida'] = d['Venda_Liquida'].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                d['Ticket_Medio'] = d['Ticket_Medio'].apply(lambda x: f"R$ {x:,.2f}".replace('.', ','))
+                d['PA'] = d['PA'].apply(lambda x: f"{x:.1f}")
+
+            # --- EXIBIÇÃO NA TELA (Invisível no PDF) ---
+            st.markdown('<hr class="hide-on-print">', unsafe_allow_html=True)
+            st.markdown('<h3 class="hide-on-print" style="padding-bottom: 1rem; color: #00d48a; font-family: \'Helvetica Neue\', sans-serif; font-weight: 700;">📋 Ranking Consolidado: Extremos de Faturamento Diário</h3>', unsafe_allow_html=True)
+            
+            col_t1, col_t2 = st.columns(2)
+            with col_t1:
+                st.markdown("<h4 class='hide-on-print' style='color: #00d48a; margin-bottom: 10px; font-size: 1.1rem;'>🏆 Dias de Maior Faturamento (Picos)</h4>", unsafe_allow_html=True)
+                st.dataframe(df_top10, use_container_width=True, hide_index=True)
+            with col_t2:
+                st.markdown("<h4 class='hide-on-print' style='color: #f72585; margin-bottom: 10px; font-size: 1.1rem;'>⚠️ Dias de Menor Faturamento (Vales)</h4>", unsafe_allow_html=True)
+                st.dataframe(df_bottom10, use_container_width=True, hide_index=True)
+
+            # --- EXIBIÇÃO NO PDF (Bloco Compacto Forçado na Pág 3) ---
+            html_top = df_top10.to_html(index=False, classes="tabela-pdf")
+            html_bottom = df_bottom10.to_html(index=False, classes="tabela-pdf")
+            
+            html_final_pdf = f"""
+            <div class="print-only" style="page-break-before: always;">
+                <h3 style="color: #000000; margin-bottom: 20px; font-family: 'Helvetica Neue', sans-serif; font-size: 1.5rem; font-weight: 600;">📋 Ranking Consolidado: Extremos de Faturamento Diário</h3>
+                <div style="display: flex; gap: 20px;">
+                    <div style="flex: 1; min-width: 0;">
+                        <h4 style="color: #00d48a; margin-bottom: 10px; font-size: 1rem;">🏆 Dias de Maior Faturamento (Picos)</h4>
+                        {html_top}
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <h4 style="color: #f72585; margin-bottom: 10px; font-size: 1rem;">⚠️ Dias de Menor Faturamento (Vales)</h4>
+                        {html_bottom}
+                    </div>
+                </div>
+                <p style="font-size: 0.8rem; color: #666; margin-top: 5px;">* Exibindo ranking filtrado por Venda Líquida acumulada.</p>
+            </div>
+            """
+            st.markdown(html_final_pdf, unsafe_allow_html=True)
 
     else:
         st.markdown("""
@@ -413,7 +617,7 @@ else:
     st.sidebar.markdown(
         """
         <div style="text-align: center; color: #888; font-size: 0.75rem;">
-            <b>Vision Sale v1.3</b><br>
+            <b>Vision Sale v1.8</b><br>
             Automatizado por: <b>Marciel Oliveira</b><br>
             <i>Transformando dados em clareza.</i>
         </div>
