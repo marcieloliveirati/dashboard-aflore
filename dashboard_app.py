@@ -252,7 +252,12 @@ else:
         else:
             with st.sidebar.status("Conectando ao Drive...", expanded=False) as status:
                 scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-                skey = st.secrets["gcp_service_account"]
+                
+                # --- INÍCIO DO AJUSTE DA CHAVE ---
+                skey = dict(st.secrets["gcp_service_account"])
+                skey["private_key"] = skey["private_key"].replace('\\n', '\n')
+                # --- FIM DO AJUSTE DA CHAVE ---
+                
                 credentials = Credentials.from_service_account_info(skey, scopes=scopes)
                 client = gspread.authorize(credentials)
                 
