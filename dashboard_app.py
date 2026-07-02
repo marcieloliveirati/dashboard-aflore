@@ -7,6 +7,8 @@ import os
 import streamlit.components.v1 as components
 import time
 import calendar 
+import gspread
+from google.oauth2.service_account import Credentials
 
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Aflore - Dashboard", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
@@ -60,7 +62,7 @@ if not st.session_state.logado:
         # --- ASSINATURA NA TELA DE LOGIN ---
         st.markdown("""
             <div style="text-align: center; color: #888; font-size: 0.75rem; margin-top: 15px;">
-                <b>Vision Sale v1.8</b><br>
+                <b>Vision Sale v1.9</b><br>
                 Automatizado por: <b>Marciel Oliveira</b><br>
                 <i>Transformando dados em clareza.</i>
             </div>
@@ -209,8 +211,6 @@ else:
         
     st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
-    uploaded_file = st.sidebar.file_uploader("📂 Importar Planilha de Vendas (Excel)", type=["xlsx", "xls"])
-
     # --- MOTORES DE LIMPEZA E TRADUÇÃO ---
     def clean_numeric(val):
         if pd.isna(val) or str(val).strip() in ['#VALOR!', '-', '']: return 0.0
@@ -241,98 +241,117 @@ else:
 
     df = pd.DataFrame()
 
-    # --- MOTOR DE LEITURA INTELIGENTE (MÚLTIPLAS ABAS) ---
-    if uploaded_file is not None:
-        try:
-            xls_dict = pd.read_excel(uploaded_file, sheet_name=None, header=None)
-            
-            lista_abas = list(xls_dict.keys())
-            st.sidebar.markdown("---")
-            aba_selecionada = st.sidebar.selectbox("📅 Selecione o Mês/Guia:", lista_abas)
-            
-            df_raw = xls_dict[aba_selecionada]
-            
-            idx_cabecalho = -1
-            for i in range(min(5, len(df_raw))):
-                valores_linha = [str(val).strip().upper() for val in df_raw.iloc[i].values]
-                if 'V.L' in valores_linha or 'V.L.' in valores_linha:
-                    idx_cabecalho = i
-                    break
-                    
-            if idx_cabecalho >= 0:
-                headers = [str(val).strip().upper() for val in df_raw.iloc[idx_cabecalho].values]
-                vl_indices = [i for i, h in enumerate(headers) if 'V.L' in h]
-                nomes_lojas = ['Loja 01', 'Loja 02', 'Loja 03', 'Loja 04', 'Loja 05']
+    # --- CONEXÃO AUTOMÁTICA VIA GOOGLE SHEETS API ---
+    st.sidebar.markdown("### 🔄 Sincronização de Dados")
+    
+    try:
+        url_planilha = st.secrets.get("URL_PLANILHA", "")
+        
+        if not url_planilha:
+            st.sidebar.warning("⚠️ URL da planilha não configurada no Streamlit Secrets.")
+        else:
+            with st.sidebar.status("Conectando ao Drive...", expanded=False) as status:
+                scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+                skey = st.secrets["gcp_service_account"]
+                credentials = Credentials.from_service_account_info(skey, scopes=scopes)
+                client = gspread.authorize(credentials)
                 
-                metas_dinamicas = {}
-                for num_loja, col_vl in enumerate(vl_indices):
-                    if num_loja >= len(nomes_lojas): break
-                    nome_loja = nomes_lojas[num_loja]
-                    col_data = col_vl - 1
-                    
-                    meta_vl, meta_cli = 0.0, 0.0
-                    if col_data >= 0:
-                        for _, r in df_raw.iterrows():
-                            if str(r[col_data]).strip().upper() == 'META':
-                                meta_vl = clean_numeric(r[col_vl])
-                                meta_cli = clean_numeric(r[col_vl + 3])
-                                break
-                    meta_tmv = meta_vl / meta_cli if meta_cli > 0 else 0.0
-                    metas_dinamicas[nome_loja] = {'vl': meta_vl, 'cli': meta_cli, 'tmv': meta_tmv}
+                planilha = client.open_by_url(url_planilha)
                 
-                all_data = []
-                for idx, row in df_raw.iterrows():
-                    if idx <= idx_cabecalho: continue 
-                    
-                    for num_loja, col_vl in enumerate(vl_indices):
-                        if num_loja >= len(nomes_lojas): break 
-                        nome_loja = nomes_lojas[num_loja]
+                xls_dict = {}
+                for aba in planilha.worksheets():
+                    valores = aba.get_all_values()
+                    if valores:
+                        xls_dict[aba.title] = pd.DataFrame(valores)
+                status.update(label="Conexão Estabelecida!", state="complete")
+
+            if xls_dict:
+                lista_abas = list(xls_dict.keys())
+                st.sidebar.markdown("---")
+                aba_selecionada = st.sidebar.selectbox("📅 Selecione o Mês/Guia:", lista_abas)
+                
+                df_raw = xls_dict[aba_selecionada]
+                
+                idx_cabecalho = -1
+                for i in range(min(5, len(df_raw))):
+                    valores_linha = [str(val).strip().upper() for val in df_raw.iloc[i].values]
+                    if 'V.L' in valores_linha or 'V.L.' in valores_linha:
+                        idx_cabecalho = i
+                        break
                         
-                        try:
-                            col_data = col_vl - 1 
-                            if col_data < 0: continue
+                if idx_cabecalho >= 0:
+                    headers = [str(val).strip().upper() for val in df_raw.iloc[idx_cabecalho].values]
+                    vl_indices = [i for i, h in enumerate(headers) if 'V.L' in h]
+                    nomes_lojas = ['Loja 01', 'Loja 02', 'Loja 03', 'Loja 04', 'Loja 05']
+                    
+                    metas_dinamicas = {}
+                    for num_loja, col_vl in enumerate(vl_indices):
+                        if num_loja >= len(nomes_lojas): break
+                        nome_loja = nomes_lojas[num_loja]
+                        col_data = col_vl - 1
+                        
+                        meta_vl, meta_cli = 0.0, 0.0
+                        if col_data >= 0:
+                            for _, r in df_raw.iterrows():
+                                if str(r[col_data]).strip().upper() == 'META':
+                                    meta_vl = clean_numeric(r[col_vl])
+                                    meta_cli = clean_numeric(r[col_vl + 3])
+                                    break
+                        meta_tmv = meta_vl / meta_cli if meta_cli > 0 else 0.0
+                        metas_dinamicas[nome_loja] = {'vl': meta_vl, 'cli': meta_cli, 'tmv': meta_tmv}
+                    
+                    all_data = []
+                    for idx, row in df_raw.iterrows():
+                        if idx <= idx_cabecalho: continue 
+                        
+                        for num_loja, col_vl in enumerate(vl_indices):
+                            if num_loja >= len(nomes_lojas): break 
+                            nome_loja = nomes_lojas[num_loja]
                             
-                            val_data_crua = row[col_data]
-                            str_data_check = str(val_data_crua).strip().upper()
-                            
-                            if pd.isna(val_data_crua) or 'TOTAL' in str_data_check or 'META' in str_data_check or str_data_check in ('', 'NAN', 'NAT'):
-                                continue
+                            try:
+                                col_data = col_vl - 1 
+                                if col_data < 0: continue
                                 
-                            vl = clean_numeric(row[col_vl])
-                            tmv = clean_numeric(row[col_vl + 1])
-                            pa = clean_numeric(row[col_vl + 2])
-                            clientes = clean_numeric(row[col_vl + 3])
-                            
-                            if vl > 0 or clientes > 0:
-                                all_data.append({
-                                    'Data_Raw': val_data_crua, 
-                                    'Loja': nome_loja,
-                                    'Venda_Liquida': vl, 
-                                    'Ticket_Medio': tmv,
-                                    'PA': pa, 
-                                    'Clientes': int(clientes),
-                                    'Meta_Faturamento': metas_dinamicas[nome_loja]['vl'],
-                                    'Meta_Clientes': metas_dinamicas[nome_loja]['cli'],
-                                    'Meta_TMV': metas_dinamicas[nome_loja]['tmv']
-                                })
-                        except Exception: pass
-                
-                df = pd.DataFrame(all_data)
-                
-                if not df.empty:
-                    df['Data_Real'] = df['Data_Raw'].apply(parse_data)
-                    df = df.dropna(subset=['Data_Real']) 
-                    df['Data_String'] = df['Data_Real'].apply(lambda d: d.strftime("%d/%m"))
-                
-            if df.empty:
-                st.sidebar.warning(f"⚠️ Planilha lida (Aba: {aba_selecionada}), mas sem dados válidos encontrados.")
-            else:
-                st.sidebar.success(f"✅ Aba '{aba_selecionada}' processada com sucesso!")
-                
-        except Exception as e:
-            st.sidebar.error(f"❌ Arquivo inválido ou formato incompatível. Erro Técnico: {str(e)}")
-    else:
-        st.sidebar.info("💡 Suba a planilha real para processar os números da operação.")
+                                val_data_crua = row[col_data]
+                                str_data_check = str(val_data_crua).strip().upper()
+                                
+                                if pd.isna(val_data_crua) or 'TOTAL' in str_data_check or 'META' in str_data_check or str_data_check in ('', 'NAN', 'NAT', 'NONE'):
+                                    continue
+                                    
+                                vl = clean_numeric(row[col_vl])
+                                tmv = clean_numeric(row[col_vl + 1])
+                                pa = clean_numeric(row[col_vl + 2])
+                                clientes = clean_numeric(row[col_vl + 3])
+                                
+                                if vl > 0 or clientes > 0:
+                                    all_data.append({
+                                        'Data_Raw': val_data_crua, 
+                                        'Loja': nome_loja,
+                                        'Venda_Liquida': vl, 
+                                        'Ticket_Medio': tmv,
+                                        'PA': pa, 
+                                        'Clientes': int(clientes),
+                                        'Meta_Faturamento': metas_dinamicas[nome_loja]['vl'],
+                                        'Meta_Clientes': metas_dinamicas[nome_loja]['cli'],
+                                        'Meta_TMV': metas_dinamicas[nome_loja]['tmv']
+                                    })
+                            except Exception: pass
+                    
+                    df = pd.DataFrame(all_data)
+                    
+                    if not df.empty:
+                        df['Data_Real'] = df['Data_Raw'].apply(parse_data)
+                        df = df.dropna(subset=['Data_Real']) 
+                        df['Data_String'] = df['Data_Real'].apply(lambda d: d.strftime("%d/%m"))
+                    
+                if df.empty:
+                    st.sidebar.warning(f"⚠️ Aba: {aba_selecionada} sem dados válidos.")
+                else:
+                    st.sidebar.success(f"✅ Aba '{aba_selecionada}' lida com sucesso!")
+                    
+    except Exception as e:
+        st.sidebar.error(f"❌ Erro de conexão: {str(e)}")
+        st.sidebar.info("Verifique suas credenciais no Streamlit Secrets.")
 
     # --- CAMADA DE VISUALIZAÇÃO E FILTROS ---
     if not df.empty and 'Loja' in df.columns:
@@ -608,8 +627,8 @@ else:
         st.markdown("""
             <div class="welcome-msg">
                 <h2>Bem-vindo ao Sistema de Inteligência 🚀</h2>
-                <p>O seu painel está pronto e aguardando os dados.<br>
-                Faça o upload da planilha Excel no menu lateral esquerdo para visualizar os gráficos.</p>
+                <p>O seu painel está conectado à nuvem.<br>
+                Insira as credenciais no menu lateral esquerdo para sincronizar com o Google Drive.</p>
             </div>
         """, unsafe_allow_html=True)
         
@@ -617,7 +636,7 @@ else:
     st.sidebar.markdown(
         """
         <div style="text-align: center; color: #888; font-size: 0.75rem;">
-            <b>Vision Sale v1.8</b><br>
+            <b>Vision Sale v1.9</b><br>
             Automatizado por: <b>Marciel Oliveira</b><br>
             <i>Transformando dados em clareza.</i>
         </div>
