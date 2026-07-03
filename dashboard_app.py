@@ -211,6 +211,11 @@ else:
         
     st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
+    # --- BOTÃO DE ATUALIZAÇÃO MANUAL ---
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🔄 Atualizar Dados Agora", use_container_width=True):
+        st.rerun()
+
     # --- MOTORES DE LIMPEZA E TRADUÇÃO ---
     def clean_numeric(val):
         if pd.isna(val) or str(val).strip() in ['#VALOR!', '-', '']: return 0.0
