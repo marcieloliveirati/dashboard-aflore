@@ -228,39 +228,38 @@ else:
     )
     st.sidebar.markdown("---")
 
-    # ==========================================
+   # ==========================================
     # MÓDULO 1: VISÃO GERAL DE LOJAS (SEU CÓDIGO ATUAL)
     # ==========================================
     if modulo_selecionado == "📈 Visão Geral de Lojas":
         
         # --- MOTORES DE LIMPEZA E TRADUÇÃO ---
         def clean_numeric(val):
-        if pd.isna(val) or str(val).strip() in ['#VALOR!', '-', '']: return 0.0
-        if isinstance(val, (int, float)): return float(val)
-        val_str = str(val).replace('R$', '').strip()
-        if '.' in val_str and ',' not in val_str:
-            try: return float(val_str)
+            if pd.isna(val) or str(val).strip() in ['#VALOR!', '-', '']: return 0.0
+            if isinstance(val, (int, float)): return float(val)
+            val_str = str(val).replace('R$', '').strip()
+            if '.' in val_str and ',' not in val_str:
+                try: return float(val_str)
+                except: pass
+            try: return float(val_str.replace('.', '').replace(',', '.'))
+            except: return 0.0
+
+        def parse_data(val):
+            if pd.isna(val): return pd.NaT
+            if isinstance(val, (datetime, date)): return val.date() if isinstance(val, datetime) else val
+            val_str = str(val).strip().lower()
+            try: return pd.to_datetime(val_str).date()
             except: pass
-        try: return float(val_str.replace('.', '').replace(',', '.'))
-        except: return 0.0
-
-    def parse_data(val):
-        if pd.isna(val): return pd.NaT
-        if isinstance(val, (datetime, date)): return val.date() if isinstance(val, datetime) else val
-        val_str = str(val).strip().lower()
-        try: return pd.to_datetime(val_str).date()
-        except: pass
-        try:
-            partes = val_str.split('/')
-            if len(partes) >= 2:
-                dia = int(partes[0][:2])
-                mes_texto = partes[1][:3]
-                meses_map = {'jan': 1, 'fev': 2, 'mar': 3, 'abr': 4, 'mai': 5, 'jun': 6, 'jul': 7, 'ago': 8, 'set': 9, 'out': 10, 'nov': 11, 'dez': 12}
-                mes = meses_map.get(mes_texto, 6)
-                return date(date.today().year, mes, dia)
-        except: pass
-        return pd.NaT
-
+            try:
+                partes = val_str.split('/')
+                if len(partes) >= 2:
+                    dia = int(partes[0][:2])
+                    mes_texto = partes[1][:3]
+                    meses_map = {'jan': 1, 'fev': 2, 'mar': 3, 'abr': 4, 'mai': 5, 'jun': 6, 'jul': 7, 'ago': 8, 'set': 9, 'out': 10, 'nov': 11, 'dez': 12}
+                    mes = meses_map.get(mes_texto, 6)
+                    return date(date.today().year, mes, dia)
+            except: pass
+            return pd.NaT
     df = pd.DataFrame()
 
     # --- CONEXÃO AUTOMÁTICA VIA GOOGLE SHEETS API ---
