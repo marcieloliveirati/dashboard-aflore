@@ -216,6 +216,24 @@ else:
     if st.sidebar.button("🔄 Atualizar Dados Agora", use_container_width=True):
         st.rerun()
 
+# ==========================================
+    # 🧭 INÍCIO DO SISTEMA DE NAVEGAÇÃO
+    # ==========================================
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🧭 Navegação do Sistema")
+    
+    modulo_selecionado = st.sidebar.radio(
+        "Selecione o módulo de análise:",
+        ["📈 Visão Geral de Lojas", "🔥 Inteligência de Tabloides"]
+    )
+    st.sidebar.markdown("---")
+
+    # ==========================================
+    # MÓDULO 1: VISÃO GERAL DE LOJAS (SEU CÓDIGO ATUAL)
+    # ==========================================
+    if modulo_selecionado == "📈 Visão Geral de Lojas":
+         
+
     # --- MOTORES DE LIMPEZA E TRADUÇÃO ---
     def clean_numeric(val):
         if pd.isna(val) or str(val).strip() in ['#VALOR!', '-', '']: return 0.0
