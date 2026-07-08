@@ -211,12 +211,12 @@ else:
         
     st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
-    # --- BOTÃO DE ATUALIZAÇÃO MANUAL ---
+# --- BOTÃO DE ATUALIZAÇÃO MANUAL ---
     st.sidebar.markdown("---")
     if st.sidebar.button("🔄 Atualizar Dados Agora", use_container_width=True):
         st.rerun()
 
-# ==========================================
+    # ==========================================
     # 🧭 INÍCIO DO SISTEMA DE NAVEGAÇÃO
     # ==========================================
     st.sidebar.markdown("---")
@@ -232,10 +232,9 @@ else:
     # MÓDULO 1: VISÃO GERAL DE LOJAS (SEU CÓDIGO ATUAL)
     # ==========================================
     if modulo_selecionado == "📈 Visão Geral de Lojas":
-         
-
-    # --- MOTORES DE LIMPEZA E TRADUÇÃO ---
-    def clean_numeric(val):
+        
+        # --- MOTORES DE LIMPEZA E TRADUÇÃO ---
+        def clean_numeric(val):
         if pd.isna(val) or str(val).strip() in ['#VALOR!', '-', '']: return 0.0
         if isinstance(val, (int, float)): return float(val)
         val_str = str(val).replace('R$', '').strip()
