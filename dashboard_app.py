@@ -10,10 +10,47 @@ import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 
-# 1. CONFIGURAÇÃO DA PÁGINA
+# 1. CONFIGURAÇÃO DA PÁGINA (Sempre a primeira linha do Streamlit)
 st.set_page_config(page_title="Aflore - Dashboard", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
+# ==========================================
+# MOTORES DE MEMÓRIA (CACHE) PARA BLINDAR O SERVIDOR
+# ==========================================
+@st.cache_data(ttl=900) # Guarda os dados por 15 minutos
+def carregar_dados_visao_geral(url_planilha, secrets_dict):
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    credentials = Credentials.from_service_account_info(secrets_dict, scopes=scopes)
+    client = gspread.authorize(credentials)
+    planilha = client.open_by_url(url_planilha)
+    
+    xls_dict = {}
+    for aba in planilha.worksheets():
+        valores = aba.get_all_values()
+        if valores:
+            xls_dict[aba.title] = pd.DataFrame(valores)
+    return xls_dict
+
+@st.cache_data(ttl=900) # Guarda os dados por 15 minutos
+def carregar_dados_tabloides(url_tabloides, secrets_dict):
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    credentials = Credentials.from_service_account_info(secrets_dict, scopes=scopes)
+    client = gspread.authorize(credentials)
+    
+    planilha_tab = client.open_by_url(url_tabloides)
+    aba_efetividade = planilha_tab.worksheet("efetividade")
+    
+    dados_brutos = aba_efetividade.get_all_values()
+    df_tab = pd.DataFrame(dados_brutos[1:], columns=dados_brutos[0])
+    
+    # Limpeza básica e imediata
+    df_tab = df_tab[df_tab['SKU'].astype(str).str.strip() != '']
+    df_tab = df_tab[df_tab['TABLOIDE'].astype(str).str.strip() != '']
+    
+    return df_tab
+
+# ==========================================
 # --- SISTEMA DE SEGURANÇA E LOGIN ---
+# ==========================================
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
@@ -34,9 +71,9 @@ if not st.session_state.logado:
             col_img1, col_img2, col_img3 = st.columns([1, 1.5, 1])
             with col_img2:
                 if os.path.exists("logo_aflore.png"):
-                    st.image("logo_aflore.png", width="stretch")
+                    st.image("logo_aflore.png", use_column_width=True)
                 elif os.path.exists("logo.png"):
-                    st.image("logo.png", width="stretch")
+                    st.image("logo.png", use_column_width=True)
                 else:
                     st.markdown("<h3 style='text-align: center; color: #00d48a;'>AFLORE DIGITAL</h3>", unsafe_allow_html=True)
                     
@@ -45,7 +82,7 @@ if not st.session_state.logado:
             usuario = st.text_input("👤 Usuário")
             senha = st.text_input("🔑 Senha", type="password")
             
-            submit = st.form_submit_button("Entrar", width="stretch")
+            submit = st.form_submit_button("Entrar", use_container_width=True)
             
             if submit:
                 usuarios_permitidos = {
@@ -184,7 +221,7 @@ else:
         
     with col_imprimir:
         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-        if st.button("🖨️ Gerar PDF", width="stretch"):
+        if st.button("🖨️ Gerar PDF", use_container_width=True):
             components.html(
                 f"<script>setTimeout(function() {{ window.parent.print(); }}, 1000);</script><span style='display:none'>{time.time()}</span>", 
                 height=0, 
@@ -193,7 +230,7 @@ else:
             
     with col_sair:
         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-        if st.button("🚪 Sair", width="stretch"):
+        if st.button("🚪 Sair", use_container_width=True):
             st.session_state.logado = False
             st.rerun()
 
@@ -201,19 +238,20 @@ else:
     if os.path.exists("logo_aflore.png"):
         col1, col2, col3 = st.sidebar.columns([1, 2, 1])
         with col2:
-            st.image("logo_aflore.png", width="stretch")
+            st.image("logo_aflore.png", use_column_width=True)
     elif os.path.exists("logo.png"):
         col1, col2, col3 = st.sidebar.columns([1, 2, 1])
         with col2:
-            st.image("logo.png", width="stretch")
+            st.image("logo.png", use_column_width=True)
     else:
         st.sidebar.markdown("<h2 style='text-align: center; color: #00d48a;'>AFLORE DIGITAL</h2>", unsafe_allow_html=True)
         
     st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
-# --- BOTÃO DE ATUALIZAÇÃO MANUAL ---
+    # --- BOTÃO DE ATUALIZAÇÃO MANUAL (LIMPA O CACHE) ---
     st.sidebar.markdown("---")
-    if st.sidebar.button("🔄 Atualizar Dados Agora", width="stretch"):
+    if st.sidebar.button("🔄 Atualizar Dados Agora", use_container_width=True):
+        st.cache_data.clear() # Limpa a memória para buscar dados novos do Sheets
         st.rerun()
 
     # ==========================================
@@ -263,7 +301,7 @@ else:
             
         df = pd.DataFrame()
 
-        # --- CONEXÃO AUTOMÁTICA VIA GOOGLE SHEETS API ---
+        # --- CONEXÃO COM CACHE VIA GOOGLE SHEETS API ---
         st.sidebar.markdown("### 🔄 Sincronização de Dados")
         
         try:
@@ -273,17 +311,9 @@ else:
                 st.sidebar.warning("⚠️ URL da planilha não configurada no Streamlit Secrets.")
             else:
                 with st.sidebar.status("Conectando ao Drive...", expanded=False) as status:
-                    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-                    skey = dict(st.secrets["gcp_service_account"])
-                    credentials = Credentials.from_service_account_info(skey, scopes=scopes)
-                    client = gspread.authorize(credentials)
-                    planilha = client.open_by_url(url_planilha)
-                    
-                    xls_dict = {}
-                    for aba in planilha.worksheets():
-                        valores = aba.get_all_values()
-                        if valores:
-                            xls_dict[aba.title] = pd.DataFrame(valores)
+                    # Usa o Cérebro de Memória (Cache) em vez de baixar tudo de novo
+                    secrets_dict = dict(st.secrets["gcp_service_account"])
+                    xls_dict = carregar_dados_visao_geral(url_planilha, secrets_dict)
                     status.update(label="Conexão Estabelecida!", state="complete")
 
                 if xls_dict:
@@ -550,7 +580,7 @@ else:
                     if nova_meta_diaria > 0 and nova_meta_diaria != meta_diaria_original:
                         fig_linha.add_hline(y=nova_meta_diaria, line_dash="dash", line_color="#f72585", annotation_text="Meta Exigida", annotation_position="top right")
                     fig_linha.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                    st.plotly_chart(fig_linha, width="stretch", theme="streamlit")
+                    st.plotly_chart(fig_linha, use_container_width=True, theme="streamlit")
 
                 with col_dir:
                     st.subheader("🏪 Previsto x Realizado por Unidade")
@@ -562,7 +592,7 @@ else:
                                        color_discrete_map={'Realizado': '#00b4d8', 'Previsto': '#a8a8a8'},
                                        labels={'Valor': 'Faturamento (R$)', 'Tipo': 'Métrica'})
                     fig_barra.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                    st.plotly_chart(fig_barra, width="stretch", theme="streamlit")
+                    st.plotly_chart(fig_barra, use_container_width=True, theme="streamlit")
 
                 # =========================================================================
                 # --- INJEÇÃO DA QUEBRA DE PÁGINA PARA O RELATÓRIO PDF (FIM DA PÁG 1) ---
@@ -585,7 +615,7 @@ else:
                 fig_acumulado.update_traces(patch={"line": {"width": 4}}, selector={"name": "Realizado Acumulado"})
                 fig_acumulado.update_traces(patch={"line": {"width": 3, "dash": "dash"}}, selector={"name": "Meta Projetada Acumulada"})
                 fig_acumulado.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                st.plotly_chart(fig_acumulado, width="stretch", theme="streamlit")
+                st.plotly_chart(fig_acumulado, use_container_width=True, theme="streamlit")
 
                 st.markdown('<hr class="hide-on-print">', unsafe_allow_html=True)
                 
@@ -594,7 +624,7 @@ else:
                 df_eficiencia = df_filtrado.groupby('Loja').agg({'Ticket_Medio': 'mean', 'PA': 'mean'}).reset_index()
                 fig_scatter = px.scatter(df_eficiencia, x='Ticket_Medio', y='PA', text='Loja', size='Ticket_Medio', color='Loja')
                 fig_scatter.update_traces(textposition='top center')
-                st.plotly_chart(fig_scatter, width="stretch", theme="streamlit")
+                st.plotly_chart(fig_scatter, use_container_width=True, theme="streamlit")
 
                 # =========================================================================
                 # --- SEÇÃO DE RANKING (PÁGINA 3 NO PDF) ---
@@ -617,10 +647,10 @@ else:
                 col_t1, col_t2 = st.columns(2)
                 with col_t1:
                     st.markdown("<h4 class='hide-on-print' style='color: #00d48a; margin-bottom: 10px; font-size: 1.1rem;'>🏆 Dias de Maior Faturamento (Picos)</h4>", unsafe_allow_html=True)
-                    st.dataframe(df_top10, width="stretch", hide_index=True)
+                    st.dataframe(df_top10, use_container_width=True, hide_index=True)
                 with col_t2:
                     st.markdown("<h4 class='hide-on-print' style='color: #f72585; margin-bottom: 10px; font-size: 1.1rem;'>⚠️ Dias de Menor Faturamento (Vales)</h4>", unsafe_allow_html=True)
-                    st.dataframe(df_bottom10, width="stretch", hide_index=True)
+                    st.dataframe(df_bottom10, use_container_width=True, hide_index=True)
 
                 # --- EXIBIÇÃO NO PDF (Bloco Compacto Forçado na Pág 3) ---
                 html_top = df_top10.to_html(index=False, classes="tabela-pdf")
@@ -667,21 +697,9 @@ else:
         else:
             with st.spinner("Conectando ao banco de dados de tabloides..."):
                 try:
-                    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-                    skey = dict(st.secrets["gcp_service_account"])
-                    credentials = Credentials.from_service_account_info(skey, scopes=scopes)
-                    client = gspread.authorize(credentials)
-                    
-                    # Abre a planilha separada e a aba efetividade
-                    planilha_tab = client.open_by_url(url_tabloides)
-                    aba_efetividade = planilha_tab.worksheet("efetividade")
-                    
-                    dados_brutos = aba_efetividade.get_all_values()
-                    df_tab = pd.DataFrame(dados_brutos[1:], columns=dados_brutos[0])
-                    
-                    # Limpeza básica: Garante que só lê linhas com SKU e Tabloide preenchidos
-                    df_tab = df_tab[df_tab['SKU'].astype(str).str.strip() != '']
-                    df_tab = df_tab[df_tab['TABLOIDE'].astype(str).str.strip() != '']
+                    # Usa o Cérebro de Memória (Cache) para carregar a planilha apenas 1 vez
+                    secrets_dict = dict(st.secrets["gcp_service_account"])
+                    df_tab = carregar_dados_tabloides(url_tabloides, secrets_dict)
 
                     if df_tab.empty:
                         st.info("Nenhum dado de tabloide encontrado ou colunas vazias.")
@@ -773,7 +791,7 @@ else:
                         st.markdown("#### 🏆 Top 5 Categorias Mais Vendidas (R$)")
                         cat_chart = df_filtrado.groupby('CATEGORIA')['FAT_ATUAL'].sum().reset_index()
                         cat_chart = cat_chart.sort_values(by='FAT_ATUAL', ascending=False).head(5)
-                        st.bar_chart(data=cat_chart, x='CATEGORIA', y='FAT_ATUAL', width="stretch")
+                        st.bar_chart(data=cat_chart, x='CATEGORIA', y='FAT_ATUAL', use_container_width=True)
 
                     with col_g2:
                         st.markdown("#### 🚀 Maiores Crescimentos de Faturamento YoY")
@@ -786,7 +804,7 @@ else:
                             st.dataframe(
                                 top_produtos[['SKU', 'DESCRIÇÃO', '🔥 Cresc. YoY (%)']], 
                                 hide_index=True, 
-                                width="stretch"
+                                use_container_width=True
                             )
                         else:
                             st.caption("Dados históricos insuficientes nesta seleção para gerar o ranking de produtos.")
@@ -805,7 +823,7 @@ else:
                         'VENDA BRUTA (Ano Anterior)', 'VENDA BRUTA (Mês Anterior)', 'VENDA BRUTA (Tabloide Atual)'
                     ]
                     
-                    st.dataframe(df_filtrado[colunas_exibicao], width="stretch", hide_index=True)
+                    st.dataframe(df_filtrado[colunas_exibicao], use_container_width=True, hide_index=True)
 
                 except Exception as e:
                     st.error(f"Erro ao processar o Dashboard de Tabloides: {e}")
