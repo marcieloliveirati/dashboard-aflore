@@ -598,9 +598,13 @@ else:
                     df_loja_sum['Meta_Proporcional'] = df_loja_sum['Meta_Faturamento'] * fator_meta
                     df_barras = df_loja_sum.melt(id_vars='Loja', value_vars=['Venda_Liquida', 'Meta_Proporcional'], var_name='Tipo', value_name='Valor')
                     df_barras['Tipo'] = df_barras['Tipo'].map({'Venda_Liquida': 'Realizado', 'Meta_Proporcional': 'Previsto'})
+                    
+                    # O comando category_orders força a barra cinza (Previsto) a nascer antes da azul (Realizado)
                     fig_barra = px.bar(df_barras, x='Loja', y='Valor', color='Tipo', barmode='group', 
                                        color_discrete_map={'Realizado': '#00b4d8', 'Previsto': '#a8a8a8'},
-                                       labels={'Valor': 'Faturamento (R$)', 'Tipo': 'Métrica'})
+                                       labels={'Valor': 'Faturamento (R$)', 'Tipo': 'Métrica'},
+                                       category_orders={'Tipo': ['Previsto', 'Realizado']})
+                    
                     fig_barra.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
                     st.plotly_chart(fig_barra, use_container_width=True, theme="streamlit")
 
