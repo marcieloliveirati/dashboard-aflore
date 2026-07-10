@@ -285,9 +285,15 @@ else:
         def parse_data(val):
             if pd.isna(val): return pd.NaT
             if isinstance(val, (datetime, date)): return val.date() if isinstance(val, datetime) else val
-            val_str = str(val).strip().lower()
-            try: return pd.to_datetime(val_str).date()
+            val_str = str(val).strip().lower().replace('-', '/')
+            
+            # Tenta converter forçando o padrão BRASILEIRO (Dia primeiro)
+            try: 
+                dt = pd.to_datetime(val_str, dayfirst=True)
+                if pd.notnull(dt): return dt.date()
             except: pass
+            
+            # Fallback robusto para textos como "01/jun"
             try:
                 partes = val_str.split('/')
                 if len(partes) >= 2:
@@ -295,8 +301,12 @@ else:
                     mes_texto = partes[1][:3]
                     meses_map = {'jan': 1, 'fev': 2, 'mar': 3, 'abr': 4, 'mai': 5, 'jun': 6, 'jul': 7, 'ago': 8, 'set': 9, 'out': 10, 'nov': 11, 'dez': 12}
                     mes = meses_map.get(mes_texto, 6)
-                    return date(date.today().year, mes, dia)
+                    ano = date.today().year
+                    if len(partes) == 3 and len(partes[2]) == 4:
+                        ano = int(partes[2])
+                    return date(ano, mes, dia)
             except: pass
+            
             return pd.NaT
             
         df = pd.DataFrame()
@@ -393,7 +403,7 @@ else:
                         if not df.empty:
                             df['Data_Real'] = df['Data_Raw'].apply(parse_data)
                             df = df.dropna(subset=['Data_Real']) 
-                            df['Data_String'] = df['Data_Real'].apply(lambda d: d.strftime("%d/%m"))
+                            df['Data_String'] = df['Data_Real'].apply(lambda d: d.strftime("%d/%m") if pd.notnull(d) else "")
                         
                     if df.empty:
                         st.sidebar.warning(f"⚠️ Aba: {aba_selecionada} sem dados válidos.")
