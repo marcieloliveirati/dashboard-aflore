@@ -444,36 +444,7 @@ else:
             hoje = date.today()
             df_filtrado = df.copy()
 
-            # --- MOTOR DE INTELIGÊNCIA: GPS DE VENDAS ---
-            df_contexto = df.copy()
-            if loja_selecionada != 'Todas as Lojas':
-                df_contexto = df_contexto[df_contexto['Loja'] == loja_selecionada]
-
-            meta_mes_total = df_contexto.drop_duplicates(subset=['Loja'])['Meta_Faturamento'].sum()
-            faturado_mes_total = df_contexto['Venda_Liquida'].sum()
-
-            max_data_planilha = df_contexto['Data_Real'].max()
-            nova_meta_diaria, meta_diaria_original, dias_uteis_restantes, dias_uteis_passados = 0, 0, 0, 0
-            
-            if pd.notna(max_data_planilha):
-                ano_ref = max_data_planilha.year
-                mes_ref = max_data_planilha.month
-                _, num_dias = calendar.monthrange(ano_ref, mes_ref)
-
-                dias_uteis_total = sum(1 for d in range(1, num_dias + 1) if date(ano_ref, mes_ref, d).weekday() < 6)
-                dias_uteis_passados = sum(1 for d in range(1, max_data_planilha.day + 1) if date(ano_ref, mes_ref, d).weekday() < 6)
-                dias_uteis_restantes = dias_uteis_total - dias_uteis_passados
-
-                meta_restante = max(0, meta_mes_total - faturado_mes_total)
-                
-                if dias_uteis_restantes > 0:
-                    nova_meta_diaria = meta_restante / dias_uteis_restantes
-                else:
-                    nova_meta_diaria = 0 if meta_restante <= 0 else meta_restante
-                    
-                meta_diaria_original = meta_mes_total / dias_uteis_total if dias_uteis_total > 0 else 0
-
-            # --- APLICAÇÃO DOS FILTROS (BLINDADO COM DATE NATIVO) ---
+            # --- APLICAÇÃO DOS FILTROS DE DATA (ANTES DO GPS) ---
             if opcao_data == "Hoje":
                 df_filtrado = df_filtrado[df_filtrado['Data_Real'] == hoje]
             elif opcao_data == "Ontem":
@@ -528,6 +499,48 @@ else:
                 str_meta_cli = f"{int(meta_prop_cli):,}".replace(',', '.')
                 str_meta_tmv = f"R$ {meta_prop_tmv:,.2f}".replace('.', ',')
 
+                # --- MOTOR DE INTELIGÊNCIA: GPS DE VENDAS (AGORA BLINDADO COM MES FECHADO) ---
+                df_contexto = df.copy() # O GPS sempre olha o mês inteiro da aba para balizar
+                if loja_selecionada != 'Todas as Lojas':
+                    df_contexto = df_contexto[df_contexto['Loja'] == loja_selecionada]
+
+                meta_mes_total = df_contexto.drop_duplicates(subset=['Loja'])['Meta_Faturamento'].sum()
+                faturado_mes_total = df_contexto['Venda_Liquida'].sum()
+
+                max_data_planilha = df_contexto['Data_Real'].max()
+                nova_meta_diaria, meta_diaria_original, dias_uteis_restantes, dias_uteis_passados = 0, 0, 0, 0
+                mes_fechado = False
+                
+                if pd.notna(max_data_planilha):
+                    ano_ref = max_data_planilha.year
+                    mes_ref = max_data_planilha.month
+                    
+                    ano_hoje = date.today().year
+                    mes_hoje = date.today().month
+
+                    # Lógica de Inteligência: Se a aba for de um mês anterior, declara como Fechado
+                    if ano_ref < ano_hoje or (ano_ref == ano_hoje and mes_ref < mes_hoje):
+                        mes_fechado = True
+
+                    _, num_dias = calendar.monthrange(ano_ref, mes_ref)
+
+                    dias_uteis_total = sum(1 for d in range(1, num_dias + 1) if date(ano_ref, mes_ref, d).weekday() < 6)
+                    meta_diaria_original = meta_mes_total / dias_uteis_total if dias_uteis_total > 0 else 0
+
+                    if mes_fechado:
+                        dias_uteis_restantes = 0
+                        nova_meta_diaria = 0
+                    else:
+                        dias_uteis_passados = sum(1 for d in range(1, max_data_planilha.day + 1) if date(ano_ref, mes_ref, d).weekday() < 6)
+                        dias_uteis_restantes = dias_uteis_total - dias_uteis_passados
+
+                        meta_restante = max(0, meta_mes_total - faturado_mes_total)
+                        
+                        if dias_uteis_restantes > 0:
+                            nova_meta_diaria = meta_restante / dias_uteis_restantes
+                        else:
+                            nova_meta_diaria = 0 if meta_restante <= 0 else meta_restante
+
                 # --- CARDS VISUAIS ---
                 st.markdown("### 🎯 Acompanhamento de Metas")
                 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
@@ -552,31 +565,62 @@ else:
                     st.markdown("<div style='font-size: 1rem; font-weight: 600; color: #888888; margin-top: -15px; margin-bottom: 10px;'>Média do período</div>", unsafe_allow_html=True)
 
                 # --- BANNER: GPS DE VENDAS ---
-                str_nova_meta = f"R$ {nova_meta_diaria:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-                str_meta_orig = f"R$ {meta_diaria_original:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-                
-                cor_alerta = "#00d48a" if nova_meta_diaria <= meta_diaria_original else "#f72585"
-                mensagem_status = "Meta sob controle." if nova_meta_diaria <= meta_diaria_original else "Aceleração necessária."
-                
-                st.markdown(f"""
-                <div class="gps-box" style='background-color: rgba(128,128,128, 0.1); padding: 20px; border-radius: 10px; border-left: 8px solid {cor_alerta}; margin-bottom: 25px; margin-top: 15px;'>
-                    <h4 style='margin:0 0 10px 0; color: {cor_alerta};'>🧭 GPS de Vendas: Recálculo de Rota Diário</h4>
-                    <div style='display: flex; justify-content: space-between; flex-wrap: wrap;'>
-                        <div style='flex: 1; min-width: 200px;'>
-                            <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Meta Diária Original</p>
-                            <p class="gps-val" style='margin:0; font-size: 1.4rem; font-weight: bold;'>{str_meta_orig}</p>
-                        </div>
-                        <div style='flex: 1; min-width: 200px;'>
-                            <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Meta Diária Exigida (Hoje)</p>
-                            <p style='margin:0; font-size: 1.4rem; font-weight: bold; color: {cor_alerta};'>{str_nova_meta}</p>
-                        </div>
-                        <div style='flex: 1; min-width: 200px;'>
-                            <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Status do Mês</p>
-                            <p class="gps-val" style='margin:0; font-size: 1.1rem;'>Restam <b>{dias_uteis_restantes} dias úteis</b>. {mensagem_status}</p>
+                if mes_fechado:
+                    str_meta_mes = f"R$ {meta_mes_total:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                    str_fat_mes = f"R$ {faturado_mes_total:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                    
+                    if faturado_mes_total >= meta_mes_total:
+                        cor_alerta = "#00d48a"
+                        mensagem_status = "✅ Meta superada!"
+                    else:
+                        cor_alerta = "#f72585"
+                        mensagem_status = "⚠️ Meta não atingida."
+
+                    st.markdown(f"""
+                    <div class="gps-box" style='background-color: rgba(128,128,128, 0.1); padding: 20px; border-radius: 10px; border-left: 8px solid {cor_alerta}; margin-bottom: 25px; margin-top: 15px;'>
+                        <h4 style='margin:0 0 10px 0; color: {cor_alerta};'>🏁 Fechamento do Mês: Resultado Final</h4>
+                        <div style='display: flex; justify-content: space-between; flex-wrap: wrap;'>
+                            <div style='flex: 1; min-width: 200px;'>
+                                <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Meta Total Original</p>
+                                <p class="gps-val" style='margin:0; font-size: 1.4rem; font-weight: bold;'>{str_meta_mes}</p>
+                            </div>
+                            <div style='flex: 1; min-width: 200px;'>
+                                <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Faturamento Consolidado</p>
+                                <p style='margin:0; font-size: 1.4rem; font-weight: bold; color: {cor_alerta};'>{str_fat_mes}</p>
+                            </div>
+                            <div style='flex: 1; min-width: 200px;'>
+                                <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Status de Performance</p>
+                                <p class="gps-val" style='margin:0; font-size: 1.1rem;'><b>{mensagem_status}</b></p>
+                            </div>
                         </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
+                else:
+                    str_nova_meta = f"R$ {nova_meta_diaria:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                    str_meta_orig = f"R$ {meta_diaria_original:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                    
+                    cor_alerta = "#00d48a" if nova_meta_diaria <= meta_diaria_original else "#f72585"
+                    mensagem_status = "Meta sob controle." if nova_meta_diaria <= meta_diaria_original else "Aceleração necessária."
+                    
+                    st.markdown(f"""
+                    <div class="gps-box" style='background-color: rgba(128,128,128, 0.1); padding: 20px; border-radius: 10px; border-left: 8px solid {cor_alerta}; margin-bottom: 25px; margin-top: 15px;'>
+                        <h4 style='margin:0 0 10px 0; color: {cor_alerta};'>🧭 GPS de Vendas: Recálculo de Rota Diário</h4>
+                        <div style='display: flex; justify-content: space-between; flex-wrap: wrap;'>
+                            <div style='flex: 1; min-width: 200px;'>
+                                <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Meta Diária Original</p>
+                                <p class="gps-val" style='margin:0; font-size: 1.4rem; font-weight: bold;'>{str_meta_orig}</p>
+                            </div>
+                            <div style='flex: 1; min-width: 200px;'>
+                                <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Meta Diária Exigida (Hoje)</p>
+                                <p style='margin:0; font-size: 1.4rem; font-weight: bold; color: {cor_alerta};'>{str_nova_meta}</p>
+                            </div>
+                            <div style='flex: 1; min-width: 200px;'>
+                                <p class="gps-label" style='margin:0; font-size: 0.9rem; color: #888888;'>Status do Mês</p>
+                                <p class="gps-val" style='margin:0; font-size: 1.1rem;'>Restam <b>{dias_uteis_restantes} dias úteis</b>. {mensagem_status}</p>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                 # --- MOTOR DE CÁLCULO PARA GRÁFICOS DIÁRIOS E ACUMULADOS ---
                 df_diario = df_filtrado.groupby('Data_Real')['Venda_Liquida'].sum().sort_index().reset_index()
@@ -600,7 +644,7 @@ else:
                     fig_linha = px.line(df_diario, x='Data_String', y='Venda_Liquida', labels={'Venda_Liquida': 'Faturamento (R$)', 'Data_String': 'Dia'}, markers=True)
                     fig_linha.update_traces(line_color='#00b4d8', line_width=3, name='Realizado', showlegend=True)
                     fig_linha.add_hline(y=meta_diaria_original, line_dash="solid", line_color="#00d48a", annotation_text="Meta Original", annotation_position="bottom right")
-                    if nova_meta_diaria > 0 and nova_meta_diaria != meta_diaria_original:
+                    if not mes_fechado and nova_meta_diaria > 0 and nova_meta_diaria != meta_diaria_original:
                         fig_linha.add_hline(y=nova_meta_diaria, line_dash="dash", line_color="#f72585", annotation_text="Meta Exigida", annotation_position="top right")
                     fig_linha.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
                     st.plotly_chart(fig_linha, use_container_width=True, theme="streamlit")
