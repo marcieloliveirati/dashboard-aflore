@@ -99,7 +99,7 @@ if not st.session_state.logado:
         # --- ASSINATURA NA TELA DE LOGIN ---
         st.markdown("""
             <div style="text-align: center; color: #888; font-size: 0.75rem; margin-top: 15px;">
-                <b>Vision Sale v1.9</b><br>
+                <b>Vision Sale v2.1</b><br>
                 Automatizado por: <b>Marciel Oliveira</b><br>
                 <i>Transformando dados em clareza.</i>
             </div>
@@ -843,7 +843,7 @@ else:
     st.sidebar.markdown(
         """
         <div style="text-align: center; color: #888; font-size: 0.75rem;">
-            <b>Vision Sale v1.9</b><br>
+            <b>Vision Sale v2.1</b><br>
             Automatizado por: <b>Marciel Oliveira</b><br>
             <i>Transformando dados em clareza.</i>
         </div>
