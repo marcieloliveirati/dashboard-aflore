@@ -520,7 +520,7 @@ else:
                 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
                 
                 with kpi1: 
-                    st.metric("💰 Faturamento", f"R$ {total_faturamento:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'), f"{perc_fat:.1f}% da Meta")
+                    st.metric("💰 Faturamento Líquido", f"R$ {total_faturamento:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'), f"{perc_fat:.1f}% da Meta")
                     st.markdown(f"<div style='font-size: 1rem; font-weight: 700; color: #f77f00; margin-top: -15px; margin-bottom: 10px;'>🎯 Previsto: {str_meta_fat}</div>", unsafe_allow_html=True)
                     st.progress(min(perc_fat / 100, 1.0))
                     
