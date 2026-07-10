@@ -282,31 +282,31 @@ else:
             try: return float(val_str.replace('.', '').replace(',', '.'))
             except: return 0.0
 
+        # NOVO MOTOR ROBUSTO DE DATAS (Força o retorno de datetime.date puro)
         def parse_data(val):
             if pd.isna(val): return pd.NaT
-            if isinstance(val, (datetime, date)): return pd.Timestamp(val)
+            if isinstance(val, (datetime, date)): return val.date() if isinstance(val, datetime) else val
             val_str = str(val).strip().lower().replace('-', '/')
-            
-            # Tenta converter forçando o padrão BRASILEIRO e gerando Timestamp Oficial
-            try: 
-                dt = pd.to_datetime(val_str, dayfirst=True)
-                if pd.notnull(dt): return dt
-            except: pass
-            
-            # Fallback robusto para textos como "01/jun"
             try:
                 partes = val_str.split('/')
                 if len(partes) >= 2:
-                    dia = int(partes[0][:2])
-                    mes_texto = partes[1][:3]
+                    dia = int(''.join(filter(str.isdigit, partes[0])))
+                    mes_str = partes[1][:3]
                     meses_map = {'jan': 1, 'fev': 2, 'mar': 3, 'abr': 4, 'mai': 5, 'jun': 6, 'jul': 7, 'ago': 8, 'set': 9, 'out': 10, 'nov': 11, 'dez': 12}
-                    mes = meses_map.get(mes_texto, 6)
+                    if mes_str in meses_map:
+                        mes = meses_map[mes_str]
+                    else:
+                        mes = int(''.join(filter(str.isdigit, partes[1])))
+                        
                     ano = date.today().year
-                    if len(partes) == 3 and len(partes[2]) == 4:
-                        ano = int(partes[2])
-                    return pd.Timestamp(year=ano, month=mes, day=dia)
+                    if len(partes) >= 3:
+                        ano_str = ''.join(filter(str.isdigit, partes[2]))
+                        if len(ano_str) == 4:
+                            ano = int(ano_str)
+                        elif len(ano_str) == 2:
+                            ano = 2000 + int(ano_str)
+                    return date(ano, mes, dia)
             except: pass
-            
             return pd.NaT
             
         df = pd.DataFrame()
@@ -321,7 +321,6 @@ else:
                 st.sidebar.warning("⚠️ URL da planilha não configurada no Streamlit Secrets.")
             else:
                 with st.sidebar.status("Conectando ao Drive...", expanded=False) as status:
-                    # Usa o Cérebro de Memória (Cache) em vez de baixar tudo de novo
                     secrets_dict = dict(st.secrets["gcp_service_account"])
                     xls_dict = carregar_dados_visao_geral(url_planilha, secrets_dict)
                     status.update(label="Conexão Estabelecida!", state="complete")
@@ -329,7 +328,20 @@ else:
                 if xls_dict:
                     lista_abas = list(xls_dict.keys())
                     st.sidebar.markdown("---")
-                    aba_selecionada = st.sidebar.selectbox("📅 Selecione o Mês/Guia:", lista_abas)
+                    
+                    # ----------------------------------------------------
+                    # RASTREADOR DO MÊS VIGENTE (Seleciona a aba correta automaticamente)
+                    # ----------------------------------------------------
+                    meses_nomes = {1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'}
+                    mes_atual_nome = meses_nomes.get(date.today().month, "")
+                    
+                    index_padrao = 0
+                    for i, aba in enumerate(lista_abas):
+                        if mes_atual_nome.lower() in aba.lower():
+                            index_padrao = i
+                            break
+                            
+                    aba_selecionada = st.sidebar.selectbox("📅 Selecione o Mês/Guia:", lista_abas, index=index_padrao)
                     
                     df_raw = xls_dict[aba_selecionada]
                     
@@ -403,9 +415,7 @@ else:
                         if not df.empty:
                             df['Data_Real'] = df['Data_Raw'].apply(parse_data)
                             df = df.dropna(subset=['Data_Real']) 
-                            # FORÇA O PANDAS A RECONHECER A COLUNA COMO DATA OFICIAL PANDAS
-                            df['Data_Real'] = pd.to_datetime(df['Data_Real'])
-                            df['Data_String'] = df['Data_Real'].dt.strftime("%d/%m")
+                            df['Data_String'] = df['Data_Real'].apply(lambda d: d.strftime("%d/%m") if pd.notnull(d) else "")
                         
                     if df.empty:
                         st.sidebar.warning(f"⚠️ Aba: {aba_selecionada} sem dados válidos.")
@@ -430,8 +440,8 @@ else:
                 ["Todo o Período", "Hoje", "Ontem", "Últimos 7 Dias", "Personalizado"]
             )
 
-            # Usa o relógio oficial do Pandas para garantir compatibilidade nos filtros
-            hoje = pd.Timestamp(date.today())
+            # Usa o relógio nativo puro do Python para bater 100% com o Streamlit DatePicker
+            hoje = date.today()
             df_filtrado = df.copy()
 
             # --- MOTOR DE INTELIGÊNCIA: GPS DE VENDAS ---
@@ -463,21 +473,19 @@ else:
                     
                 meta_diaria_original = meta_mes_total / dias_uteis_total if dias_uteis_total > 0 else 0
 
-            # --- APLICAÇÃO DOS FILTROS (BLINDADO COM TIMESTAMP) ---
+            # --- APLICAÇÃO DOS FILTROS (BLINDADO COM DATE NATIVO) ---
             if opcao_data == "Hoje":
                 df_filtrado = df_filtrado[df_filtrado['Data_Real'] == hoje]
             elif opcao_data == "Ontem":
-                ontem = hoje - pd.Timedelta(days=1)
+                ontem = hoje - timedelta(days=1)
                 df_filtrado = df_filtrado[df_filtrado['Data_Real'] == ontem]
             elif opcao_data == "Últimos 7 Dias":
-                sete_dias_atras = hoje - pd.Timedelta(days=7)
+                sete_dias_atras = hoje - timedelta(days=7)
                 df_filtrado = df_filtrado[(df_filtrado['Data_Real'] >= sete_dias_atras) & (df_filtrado['Data_Real'] <= hoje)]
             elif opcao_data == "Personalizado":
-                # A tela captura datas normais, mas transformamos em Timestamp antes de cruzar com o banco de dados
-                datas_selecionadas = st.sidebar.date_input("Escolha o intervalo:", [hoje.date() - timedelta(days=7), hoje.date()], format="DD/MM/YYYY")
+                datas_selecionadas = st.sidebar.date_input("Escolha o intervalo:", [hoje - timedelta(days=7), hoje], format="DD/MM/YYYY")
                 if len(datas_selecionadas) == 2:
-                    data_inicio = pd.Timestamp(datas_selecionadas[0])
-                    data_fim = pd.Timestamp(datas_selecionadas[1])
+                    data_inicio, data_fim = datas_selecionadas
                     df_filtrado = df_filtrado[(df_filtrado['Data_Real'] >= data_inicio) & (df_filtrado['Data_Real'] <= data_fim)]
                 else:
                     st.sidebar.warning("Selecione a data de Início e de Fim.")
@@ -572,9 +580,9 @@ else:
 
                 # --- MOTOR DE CÁLCULO PARA GRÁFICOS DIÁRIOS E ACUMULADOS ---
                 df_diario = df_filtrado.groupby('Data_Real')['Venda_Liquida'].sum().sort_index().reset_index()
-                df_diario['Data_String'] = df_diario['Data_Real'].dt.strftime("%d/%m")
+                df_diario['Data_String'] = df_diario['Data_Real'].apply(lambda d: d.strftime("%d/%m"))
                 
-                # Cálculo dos Acumulados (Lógica do CMO)
+                # Cálculo dos Acumulados
                 df_diario['Realizado_Acumulado'] = df_diario['Venda_Liquida'].cumsum()
                 
                 if pd.notna(max_data_planilha):
