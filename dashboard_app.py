@@ -805,12 +805,25 @@ else:
 
                     with col_g2:
                         st.markdown("#### 🚀 Maiores Crescimentos de Faturamento YoY")
-                        # Filtra itens com histórico para não distorcer com 100% infinitos
-                        df_prod_growth = df_filtrado[df_filtrado['FAT_ANO_ANT'] > 50].copy()
-                        df_prod_growth['🔥 Cresc. YoY (%)'] = ((df_prod_growth['FAT_ATUAL'] / df_prod_growth['FAT_ANO_ANT']) - 1) * 100
-                        top_produtos = df_prod_growth.sort_values(by='🔥 Cresc. YoY (%)', ascending=False).head(5)
+                        
+                        # 1. Agrupar por SKU para evitar duplicidade na Visão Geral (Soma todas as lojas)
+                        df_agrupado = df_filtrado.groupby(['SKU', 'DESCRIÇÃO'])[['FAT_ATUAL', 'FAT_ANO_ANT']].sum().reset_index()
+                        
+                        # 2. Filtra itens com histórico para não distorcer com 100% infinitos
+                        df_prod_growth = df_agrupado[df_agrupado['FAT_ANO_ANT'] > 50].copy()
+                        
+                        # 3. Calcula o crescimento matemático bruto
+                        df_prod_growth['Crescimento_Bruto'] = ((df_prod_growth['FAT_ATUAL'] / df_prod_growth['FAT_ANO_ANT']) - 1) * 100
+                        
+                        # 4. Ordena e pega os top 5
+                        top_produtos = df_prod_growth.sort_values(by='Crescimento_Bruto', ascending=False).head(5)
                         
                         if not top_produtos.empty:
+                            # 5. Formata os números para o padrão Brasileiro na tela final
+                            top_produtos['🔥 Cresc. YoY (%)'] = top_produtos['Crescimento_Bruto'].apply(
+                                lambda x: f"{x:,.2f}%".replace(',', 'X').replace('.', ',').replace('X', '.')
+                            )
+                            
                             st.dataframe(
                                 top_produtos[['SKU', 'DESCRIÇÃO', '🔥 Cresc. YoY (%)']], 
                                 hide_index=True, 
