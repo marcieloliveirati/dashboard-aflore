@@ -99,7 +99,7 @@ if not st.session_state.logado:
         # --- ASSINATURA NA TELA DE LOGIN ---
         st.markdown("""
             <div style="text-align: center; color: #888; font-size: 0.75rem; margin-top: 15px;">
-                <b>Vision Sale v2.1</b><br>
+                <b>Vision Sale v1.9</b><br>
                 Automatizado por: <b>Marciel Oliveira</b><br>
                 <i>Transformando dados em clareza.</i>
             </div>
@@ -284,13 +284,13 @@ else:
 
         def parse_data(val):
             if pd.isna(val): return pd.NaT
-            if isinstance(val, (datetime, date)): return val.date() if isinstance(val, datetime) else val
+            if isinstance(val, (datetime, date)): return pd.Timestamp(val)
             val_str = str(val).strip().lower().replace('-', '/')
             
-            # Tenta converter forçando o padrão BRASILEIRO (Dia primeiro)
+            # Tenta converter forçando o padrão BRASILEIRO e gerando Timestamp Oficial
             try: 
                 dt = pd.to_datetime(val_str, dayfirst=True)
-                if pd.notnull(dt): return dt.date()
+                if pd.notnull(dt): return dt
             except: pass
             
             # Fallback robusto para textos como "01/jun"
@@ -304,7 +304,7 @@ else:
                     ano = date.today().year
                     if len(partes) == 3 and len(partes[2]) == 4:
                         ano = int(partes[2])
-                    return date(ano, mes, dia)
+                    return pd.Timestamp(year=ano, month=mes, day=dia)
             except: pass
             
             return pd.NaT
@@ -403,7 +403,9 @@ else:
                         if not df.empty:
                             df['Data_Real'] = df['Data_Raw'].apply(parse_data)
                             df = df.dropna(subset=['Data_Real']) 
-                            df['Data_String'] = df['Data_Real'].apply(lambda d: d.strftime("%d/%m") if pd.notnull(d) else "")
+                            # FORÇA O PANDAS A RECONHECER A COLUNA COMO DATA OFICIAL PANDAS
+                            df['Data_Real'] = pd.to_datetime(df['Data_Real'])
+                            df['Data_String'] = df['Data_Real'].dt.strftime("%d/%m")
                         
                     if df.empty:
                         st.sidebar.warning(f"⚠️ Aba: {aba_selecionada} sem dados válidos.")
@@ -428,7 +430,8 @@ else:
                 ["Todo o Período", "Hoje", "Ontem", "Últimos 7 Dias", "Personalizado"]
             )
 
-            hoje = date.today()
+            # Usa o relógio oficial do Pandas para garantir compatibilidade nos filtros
+            hoje = pd.Timestamp(date.today())
             df_filtrado = df.copy()
 
             # --- MOTOR DE INTELIGÊNCIA: GPS DE VENDAS ---
@@ -460,19 +463,21 @@ else:
                     
                 meta_diaria_original = meta_mes_total / dias_uteis_total if dias_uteis_total > 0 else 0
 
-            # --- APLICAÇÃO DOS FILTROS ---
+            # --- APLICAÇÃO DOS FILTROS (BLINDADO COM TIMESTAMP) ---
             if opcao_data == "Hoje":
                 df_filtrado = df_filtrado[df_filtrado['Data_Real'] == hoje]
             elif opcao_data == "Ontem":
-                ontem = hoje - timedelta(days=1)
+                ontem = hoje - pd.Timedelta(days=1)
                 df_filtrado = df_filtrado[df_filtrado['Data_Real'] == ontem]
             elif opcao_data == "Últimos 7 Dias":
-                sete_dias_atras = hoje - timedelta(days=7)
+                sete_dias_atras = hoje - pd.Timedelta(days=7)
                 df_filtrado = df_filtrado[(df_filtrado['Data_Real'] >= sete_dias_atras) & (df_filtrado['Data_Real'] <= hoje)]
             elif opcao_data == "Personalizado":
-                datas_selecionadas = st.sidebar.date_input("Escolha o intervalo:", [hoje - timedelta(days=7), hoje], format="DD/MM/YYYY")
+                # A tela captura datas normais, mas transformamos em Timestamp antes de cruzar com o banco de dados
+                datas_selecionadas = st.sidebar.date_input("Escolha o intervalo:", [hoje.date() - timedelta(days=7), hoje.date()], format="DD/MM/YYYY")
                 if len(datas_selecionadas) == 2:
-                    data_inicio, data_fim = datas_selecionadas
+                    data_inicio = pd.Timestamp(datas_selecionadas[0])
+                    data_fim = pd.Timestamp(datas_selecionadas[1])
                     df_filtrado = df_filtrado[(df_filtrado['Data_Real'] >= data_inicio) & (df_filtrado['Data_Real'] <= data_fim)]
                 else:
                     st.sidebar.warning("Selecione a data de Início e de Fim.")
@@ -520,7 +525,7 @@ else:
                 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
                 
                 with kpi1: 
-                    st.metric("💰 Faturamento Líquido", f"R$ {total_faturamento:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'), f"{perc_fat:.1f}% da Meta")
+                    st.metric("💰 Faturamento", f"R$ {total_faturamento:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'), f"{perc_fat:.1f}% da Meta")
                     st.markdown(f"<div style='font-size: 1rem; font-weight: 700; color: #f77f00; margin-top: -15px; margin-bottom: 10px;'>🎯 Previsto: {str_meta_fat}</div>", unsafe_allow_html=True)
                     st.progress(min(perc_fat / 100, 1.0))
                     
@@ -567,7 +572,7 @@ else:
 
                 # --- MOTOR DE CÁLCULO PARA GRÁFICOS DIÁRIOS E ACUMULADOS ---
                 df_diario = df_filtrado.groupby('Data_Real')['Venda_Liquida'].sum().sort_index().reset_index()
-                df_diario['Data_String'] = df_diario['Data_Real'].apply(lambda d: d.strftime("%d/%m"))
+                df_diario['Data_String'] = df_diario['Data_Real'].dt.strftime("%d/%m")
                 
                 # Cálculo dos Acumulados (Lógica do CMO)
                 df_diario['Realizado_Acumulado'] = df_diario['Venda_Liquida'].cumsum()
@@ -599,7 +604,6 @@ else:
                     df_barras = df_loja_sum.melt(id_vars='Loja', value_vars=['Venda_Liquida', 'Meta_Proporcional'], var_name='Tipo', value_name='Valor')
                     df_barras['Tipo'] = df_barras['Tipo'].map({'Venda_Liquida': 'Realizado', 'Meta_Proporcional': 'Previsto'})
                     
-                    # O comando category_orders força a barra cinza (Previsto) a nascer antes da azul (Realizado)
                     fig_barra = px.bar(df_barras, x='Loja', y='Valor', color='Tipo', barmode='group', 
                                        color_discrete_map={'Realizado': '#00b4d8', 'Previsto': '#a8a8a8'},
                                        labels={'Valor': 'Faturamento (R$)', 'Tipo': 'Métrica'},
@@ -860,7 +864,7 @@ else:
     st.sidebar.markdown(
         """
         <div style="text-align: center; color: #888; font-size: 0.75rem;">
-            <b>Vision Sale v2.1</b><br>
+            <b>Vision Sale v1.9</b><br>
             Automatizado por: <b>Marciel Oliveira</b><br>
             <i>Transformando dados em clareza.</i>
         </div>
